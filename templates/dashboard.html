@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AlgoTrade Agent Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .gradient-bg {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .card-hover {
+            transition: transform 0.2s ease-in-out;
+        }
+        .card-hover:hover {
+            transform: translateY(-2px);
+        }
+        .status-running { color: #10b981; }
+        .status-completed { color: #3b82f6; }
+        .status-failed { color: #ef4444; }
+        .status-skipped { color: #f59e0b; }
+        .activity-item {
+            border-left: 3px solid #3b82f6;
+            padding-left: 1rem;
+            margin-bottom: 0.5rem;
+        }
+        .decision-item {
+            border-left: 3px solid #10b981;
+            padding-left: 1rem;
+            margin-bottom: 0.5rem;
+        }
+        .action-item {
+            border-left: 3px solid #f59e0b;
+            padding-left: 1rem;
+            margin-bottom: 0.5rem;
+        }
+        .error-item {
+            border-left: 3px solid #ef4444;
+            padding-left: 1rem;
+            margin-bottom: 0.5rem;
+        }
+        .warning-item {
+            border-left: 3px solid #f59e0b;
+            padding-left: 1rem;
+            margin-bottom: 0.5rem;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <!-- Header -->
+    <header class="gradient-bg text-white shadow-lg">
+        <div class="container mx-auto px-6 py-4">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-3">
+                    <i class="fas fa-robot text-3xl"></i>
+                    <div>
+                        <h1 class="text-2xl font-bold">AlgoTrade Agent Dashboard</h1>
+                        <p class="text-blue-100">Real-time monitoring of AI trading agents</p>
+                    </div>
+                </div>
+                <div class="text-right">
+                    <div id="last-update" class="text-sm text-blue-100"></div>
+                    <div class="text-xs text-blue-200">Auto-refreshing every 2s</div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <div class="container mx-auto px-6 py-8">
+        <!-- Summary Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            <div class="bg-white rounded-lg shadow-md p-6 card-hover">
+                <div class="flex items-center">
+                    <div class="p-3 rounded-full bg-blue-100 text-blue-600">
+                        <i class="fas fa-play-circle text-xl"></i>
+                    </div>
+                    <div class="ml-4">
+                        <p class="text-sm font-medium text-gray-600">Total Executions</p>
+                        <p id="total-executions" class="text-2xl font-bold text-gray-900">-</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-lg shadow-md p-6 card-hover">
+                <div class="flex items-center">
+                    <div class="p-3 rounded-full bg-green-100 text-green-600">
+                        <i class="fas fa-check-circle text-xl"></i>
+                    </div>
+                    <div class="ml-4">
+                        <p class="text-sm font-medium text-gray-600">Successful</p>
+                        <p id="successful-executions" class="text-2xl font-bold text-gray-900">-</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-lg shadow-md p-6 card-hover">
+                <div class="flex items-center">
+                    <div class="p-3 rounded-full bg-yellow-100 text-yellow-600">
+                        <i class="fas fa-chart-line text-xl"></i>
+                    </div>
+                    <div class="ml-4">
+                        <p class="text-sm font-medium text-gray-600">Trades Executed</p>
+                        <p id="trades-executed" class="text-2xl font-bold text-gray-900">-</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-lg shadow-md p-6 card-hover">
+                <div class="flex items-center">
+                    <div class="p-3 rounded-full bg-purple-100 text-purple-600">
+                        <i class="fas fa-globe text-xl"></i>
+                    </div>
+                    <div class="ml-4">
+                        <p class="text-sm font-medium text-gray-600">Global Checks</p>
+                        <p id="global-checks" class="text-2xl font-bold text-gray-900">-</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Current Execution Status -->
+        <div class="bg-white rounded-lg shadow-md p-6 mb-8">
+            <h2 class="text-xl font-bold text-gray-900 mb-4">
+                <i class="fas fa-sync-alt mr-2"></i>Current Execution Status
+            </h2>
+            <div id="current-execution-status" class="text-center py-8 text-gray-500">
+                <i class="fas fa-spinner fa-spin text-3xl mb-4"></i>
+                <p>Loading current execution...</p>
+            </div>
+        </div>
+
+        <!-- Activity Streams -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <!-- Agent Activities -->
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <h3 class="text-lg font-bold text-gray-900 mb-4">
+                    <i class="fas fa-list-alt mr-2 text-blue-600"></i>Agent Activities
+                </h3>
+                <div id="agent-activities" class="space-y-3 max-h-96 overflow-y-auto">
+                    <div class="text-center py-8 text-gray-500">
+                        <i class="fas fa-spinner fa-spin text-xl mb-2"></i>
+                        <p>Loading activities...</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Decisions Made -->
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <h3 class="text-lg font-bold text-gray-900 mb-4">
+                    <i class="fas fa-bullseye mr-2 text-green-600"></i>Decisions Made
+                </h3>
+                <div id="decisions-made" class="space-y-3 max-h-96 overflow-y-auto">
+                    <div class="text-center py-8 text-gray-500">
+                        <i class="fas fa-spinner fa-spin text-xl mb-2"></i>
+                        <p>Loading decisions...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Actions and Alerts -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-8">
+            <!-- Actions Taken -->
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <h3 class="text-lg font-bold text-gray-900 mb-4">
+                    <i class="fas fa-bolt mr-2 text-yellow-600"></i>Actions Taken
+                </h3>
+                <div id="actions-taken" class="space-y-3 max-h-96 overflow-y-auto">
+                    <div class="text-center py-8 text-gray-500">
+                        <i class="fas fa-spinner fa-spin text-xl mb-2"></i>
+                        <p>Loading actions...</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Errors & Warnings -->
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <h3 class="text-lg font-bold text-gray-900 mb-4">
+                    <i class="fas fa-exclamation-triangle mr-2 text-red-600"></i>Errors & Warnings
+                </h3>
+                <div id="errors-warnings" class="space-y-3 max-h-96 overflow-y-auto">
+                    <div class="text-center py-8 text-gray-500">
+                        <i class="fas fa-spinner fa-spin text-xl mb-2"></i>
+                        <p>Loading alerts...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Recent Executions -->
+        <div class="bg-white rounded-lg shadow-md p-6 mt-8">
+            <h3 class="text-lg font-bold text-gray-900 mb-4">
+                <i class="fas fa-history mr-2 text-purple-600"></i>Recent Executions
+            </h3>
+            <div id="recent-executions" class="space-y-3">
+                <div class="text-center py-8 text-gray-500">
+                    <i class="fas fa-spinner fa-spin text-xl mb-2"></i>
+                    <p>Loading executions...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Update timestamp
+        function updateTimestamp() {
+            const now = new Date();
+            document.getElementById('last-update').textContent = 
+                `Last Updated: ${now.toLocaleTimeString()}`;
+        }
+
+        // Format timestamp
+        function formatTimestamp(timestamp) {
+            if (!timestamp) return '';
+            const date = new Date(timestamp);
+            return date.toLocaleTimeString();
+        }
+
+        // Get status color class
+        function getStatusClass(status) {
+            switch(status?.toLowerCase()) {
+                case 'running': return 'status-running';
+                case 'completed': return 'status-completed';
+                case 'failed': return 'status-failed';
+                case 'skipped': return 'status-skipped';
+                default: return 'text-gray-600';
+            }
+        }
+
+        // Update summary cards
+        function updateSummary(summary) {
+            document.getElementById('total-executions').textContent = summary.total_executions || 0;
+            document.getElementById('successful-executions').textContent = summary.successful_executions || 0;
+            document.getElementById('trades-executed').textContent = summary.trades_executed || 0;
+            document.getElementById('global-checks').textContent = summary.global_market_checks || 0;
+        }
+
+        // Update current execution status
+        function updateCurrentExecution(execution) {
+            const container = document.getElementById('current-execution-status');
+            
+            if (!execution || Object.keys(execution).length === 0) {
+                container.innerHTML = `
+                    <div class="text-center py-8 text-gray-500">
+                        <i class="fas fa-pause-circle text-3xl mb-4"></i>
+                        <p>No active execution</p>
+                    </div>
+                `;
+                return;
+            }
+
+            const statusClass = getStatusClass(execution.status);
+            const statusIcon = execution.status === 'RUNNING' ? 'fa-sync-alt fa-spin' : 
+                              execution.status === 'COMPLETED' ? 'fa-check-circle' :
+                              execution.status === 'FAILED' ? 'fa-times-circle' : 'fa-pause-circle';
+
+            container.innerHTML = `
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div class="text-center">
+                        <div class="text-2xl font-bold ${statusClass} mb-2">
+                            <i class="fas ${statusIcon} mr-2"></i>${execution.status}
+                        </div>
+                        <p class="text-sm text-gray-600">Status</p>
+                    </div>
+                    <div class="text-center">
+                        <div class="text-2xl font-bold text-gray-900 mb-2">${execution.execution_id || 'N/A'}</div>
+                        <p class="text-sm text-gray-600">Execution ID</p>
+                    </div>
+                    <div class="text-center">
+                        <div class="text-2xl font-bold text-gray-900 mb-2">${execution.duration_seconds || 'N/A'}s</div>
+                        <p class="text-sm text-gray-600">Duration</p>
+                    </div>
+                </div>
+                <div class="mt-6 text-center text-sm text-gray-600">
+                    <p>Started: ${formatTimestamp(execution.start_time)}</p>
+                    ${execution.end_time ? `<p>Ended: ${formatTimestamp(execution.end_time)}</p>` : ''}
+                </div>
+            `;
+        }
+
+        // Update activities
+        function updateActivities(activities, containerId, itemClass) {
+            const container = document.getElementById(containerId);
+            
+            if (!activities || activities.length === 0) {
+                container.innerHTML = `
+                    <div class="text-center py-8 text-gray-500">
+                        <i class="fas fa-inbox text-xl mb-2"></i>
+                        <p>No items to display</p>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = activities.slice(-10).reverse().map(item => `
+                <div class="${itemClass}">
+                    <div class="flex justify-between items-start">
+                        <div class="flex-1">
+                            <div class="font-medium text-gray-900">${item.agent || item.action_type || item.error_type || 'System'}</div>
+                            <div class="text-sm text-gray-600">${item.activity || item.decision || item.action_type || item.error_message || item.warning_message}</div>
+                            ${item.reasoning ? `<div class="text-xs text-gray-500 mt-1">${item.reasoning}</div>` : ''}
+                            ${item.confidence ? `<div class="text-xs text-blue-600 mt-1">Confidence: ${(item.confidence * 100).toFixed(1)}%</div>` : ''}
+                        </div>
+                        <div class="text-xs text-gray-400 ml-2">${formatTimestamp(item.timestamp)}</div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // Update recent executions
+        function updateRecentExecutions(executions) {
+            const container = document.getElementById('recent-executions');
+            
+            if (!executions || executions.length === 0) {
+                container.innerHTML = `
+                    <div class="text-center py-8 text-gray-500">
+                        <i class="fas fa-inbox text-xl mb-2"></i>
+                        <p>No executions to display</p>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = executions.slice(-5).reverse().map(exec => `
+                <div class="border border-gray-200 rounded-lg p-4">
+                    <div class="flex justify-between items-center">
+                        <div>
+                            <div class="font-medium text-gray-900">${exec.execution_id}</div>
+                            <div class="text-sm text-gray-600">${exec.execution_type}</div>
+                            ${exec.summary ? `<div class="text-xs text-gray-500 mt-1">${exec.summary}</div>` : ''}
+                        </div>
+                        <div class="text-right">
+                            <div class="font-medium ${getStatusClass(exec.status)}">${exec.status}</div>
+                            <div class="text-sm text-gray-600">${exec.duration_seconds}s</div>
+                            <div class="text-xs text-gray-400">${formatTimestamp(exec.start_time)}</div>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // Load dashboard data
+        async function loadDashboard() {
+            try {
+                const response = await fetch('/api/dashboard');
+                const data = await response.json();
+                
+                if (Object.keys(data).length === 0) {
+                    console.log('No dashboard data available');
+                    return;
+                }
+
+                updateSummary(data.summary || {});
+                updateCurrentExecution(data.current_execution);
+                
+                if (data.current_execution) {
+                    updateActivities(data.current_execution.agents_activity, 'agent-activities', 'activity-item');
+                    updateActivities(data.current_execution.decisions_made, 'decisions-made', 'decision-item');
+                    updateActivities(data.current_execution.actions_taken, 'actions-taken', 'action-item');
+                    
+                    // Combine errors and warnings
+                    const alerts = [
+                        ...(data.current_execution.errors || []).map(e => ({...e, type: 'error'})),
+                        ...(data.current_execution.warnings || []).map(w => ({...w, type: 'warning'}))
+                    ];
+                    updateActivities(alerts, 'errors-warnings', 'error-item');
+                }
+                
+                updateRecentExecutions(data.executions || []);
+                updateTimestamp();
+                
+            } catch (error) {
+                console.error('Error loading dashboard:', error);
+            }
+        }
+
+        // Auto-refresh every 2 seconds
+        setInterval(loadDashboard, 2000);
+        
+        // Initial load
+        loadDashboard();
+    </script>
+</body>
+</html> 

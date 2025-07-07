@@ -16,6 +16,9 @@ import json
 import datetime as dt
 from typing import Dict, List, Optional, Any
 
+# Global variable to hold connect_data_tools module
+connect_data_tools = None
+
 # Import connection tools (assumes file 1 is available)
 try:
     import connect_data_tools
@@ -24,8 +27,32 @@ try:
         get_options_chain, analyze_options_flow,
         get_historical_volatility
     )
-except ImportError:
-    print("Warning: Connection tools not available. Some functions may not work.")
+    
+    # Initialize connection if not already done
+    if not hasattr(connect_data_tools, '_kite_instance') or connect_data_tools._kite_instance is None:
+        # Try to load credentials and initialize
+        try:
+            from dotenv import load_dotenv
+            import os
+            load_dotenv(dotenv_path='./.env')
+            api_key = os.getenv("kite_api_key")
+            api_secret = os.getenv("kite_api_secret")
+            access_token = None
+            try:
+                with open("access_token.txt", "r") as f:
+                    access_token = f.read().strip()
+            except Exception:
+                pass
+            
+            if api_key and (api_secret or access_token):
+                init_result = initialize_connection(api_key, api_secret, access_token)
+                print(f"Connection initialization result: {init_result}")
+        except Exception as e:
+            print(f"Warning: Failed to initialize connection in execution tools: {e}")
+            
+except ImportError as e:
+    print(f"Warning: Connection tools not available. Some functions may not work. Error: {e}")
+    connect_data_tools = None
 
 
 def execute_options_strategy(strategy_legs: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -38,76 +65,86 @@ def execute_options_strategy(strategy_legs: List[Dict[str, Any]]) -> Dict[str, A
     Returns:
         Dict with execution results for each leg
     """
-    if not connect_data_tools._kite_instance:
-        return {'status': 'ERROR', 'message': 'Connection not initialized'}
-    
-    if not strategy_legs:
-        return {'status': 'ERROR', 'message': 'No strategy legs provided'}
-    
-    execution_results = []
-    successful_orders = 0
-    
-    for i, leg in enumerate(strategy_legs):
-        try:
-            # Validate leg data
-            required_fields = ['symbol', 'action', 'quantity']
-            if not all(field in leg for field in required_fields):
+    try:
+        if connect_data_tools is None:
+            return {'status': 'ERROR', 'message': 'Connection tools not available'}
+        
+        if not hasattr(connect_data_tools, '_kite_instance') or connect_data_tools._kite_instance is None:
+            return {'status': 'ERROR', 'message': 'Connection not initialized'}
+        
+        if not strategy_legs:
+            return {'status': 'ERROR', 'message': 'No strategy legs provided'}
+        
+        execution_results = []
+        successful_orders = 0
+        
+        for i, leg in enumerate(strategy_legs):
+            try:
+                # Validate leg data
+                required_fields = ['symbol', 'action', 'quantity']
+                if not all(field in leg for field in required_fields):
+                    execution_results.append({
+                        'leg_number': i + 1,
+                        'symbol': leg.get('symbol', 'Unknown'),
+                        'status': 'FAILED',
+                        'message': 'Missing required fields',
+                        'order_id': None
+                    })
+                    continue
+                
+                # Place order
+                order_params = {
+                    'variety': 'regular',
+                    'exchange': leg.get('exchange', 'NFO'),
+                    'tradingsymbol': leg['symbol'],
+                    'transaction_type': leg['action'],
+                    'quantity': leg['quantity'],
+                    'product': leg.get('product', 'MIS'),  # Default to MIS (intraday)
+                    'order_type': leg.get('order_type', 'MARKET'),
+                    'validity': leg.get('validity', 'DAY')
+                }
+                
+                # Add price for limit orders
+                if leg.get('order_type') == 'LIMIT' and 'price' in leg:
+                    order_params['price'] = leg['price']
+                
+                order_id = connect_data_tools._kite_instance.place_order(**order_params)
+                
+                execution_results.append({
+                    'leg_number': i + 1,
+                    'symbol': leg['symbol'],
+                    'action': leg['action'],
+                    'quantity': leg['quantity'],
+                    'status': 'SUCCESS',
+                    'message': 'Order placed successfully',
+                    'order_id': order_id
+                })
+                
+                successful_orders += 1
+                
+            except Exception as e:
                 execution_results.append({
                     'leg_number': i + 1,
                     'symbol': leg.get('symbol', 'Unknown'),
                     'status': 'FAILED',
-                    'message': 'Missing required fields',
+                    'message': f'Order placement failed: {str(e)}',
                     'order_id': None
                 })
-                continue
-            
-            # Place order
-            order_params = {
-                'variety': 'regular',
-                'exchange': leg.get('exchange', 'NFO'),
-                'tradingsymbol': leg['symbol'],
-                'transaction_type': leg['action'],
-                'quantity': leg['quantity'],
-                'product': leg.get('product', 'MIS'),  # Default to MIS (intraday)
-                'order_type': leg.get('order_type', 'MARKET'),
-                'validity': leg.get('validity', 'DAY')
-            }
-            
-            # Add price for limit orders
-            if leg.get('order_type') == 'LIMIT' and 'price' in leg:
-                order_params['price'] = leg['price']
-            
-            order_id = connect_data_tools._kite_instance.place_order(**order_params)
-            
-            execution_results.append({
-                'leg_number': i + 1,
-                'symbol': leg['symbol'],
-                'action': leg['action'],
-                'quantity': leg['quantity'],
-                'status': 'SUCCESS',
-                'message': 'Order placed successfully',
-                'order_id': order_id
-            })
-            
-            successful_orders += 1
-            
-        except Exception as e:
-            execution_results.append({
-                'leg_number': i + 1,
-                'symbol': leg.get('symbol', 'Unknown'),
-                'status': 'FAILED',
-                'message': f'Order placement failed: {str(e)}',
-                'order_id': None
-            })
-    
-    return {
-        'status': 'SUCCESS' if successful_orders > 0 else 'FAILED',
-        'total_legs': len(strategy_legs),
-        'successful_orders': successful_orders,
-        'failed_orders': len(strategy_legs) - successful_orders,
-        'execution_results': execution_results,
-        'timestamp': dt.datetime.now().isoformat()
-    }
+        
+        return {
+            'status': 'SUCCESS' if successful_orders > 0 else 'FAILED',
+            'total_legs': len(strategy_legs),
+            'successful_orders': successful_orders,
+            'failed_orders': len(strategy_legs) - successful_orders,
+            'execution_results': execution_results,
+            'timestamp': dt.datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        return {
+            'status': 'ERROR',
+            'message': f'Strategy execution failed: {str(e)}'
+        }
 
 
 def get_order_status(order_id: str) -> Dict[str, Any]:
@@ -120,10 +157,13 @@ def get_order_status(order_id: str) -> Dict[str, Any]:
     Returns:
         Dict with order status and details
     """
-    if not connect_data_tools._kite_instance:
-        return {'status': 'ERROR', 'message': 'Connection not initialized'}
-    
     try:
+        if connect_data_tools is None:
+            return {'status': 'ERROR', 'message': 'Connection tools not available'}
+        
+        if not hasattr(connect_data_tools, '_kite_instance') or connect_data_tools._kite_instance is None:
+            return {'status': 'ERROR', 'message': 'Connection not initialized'}
+        
         order_history = connect_data_tools._kite_instance.order_history(order_id)
         
         if not order_history:
@@ -170,10 +210,13 @@ def cancel_order(order_id: str, variety: str = 'regular') -> Dict[str, Any]:
     Returns:
         Dict with cancellation status
     """
-    if not connect_data_tools._kite_instance:
-        return {'status': 'ERROR', 'message': 'Connection not initialized'}
-    
     try:
+        if connect_data_tools is None:
+            return {'status': 'ERROR', 'message': 'Connection tools not available'}
+        
+        if not hasattr(connect_data_tools, '_kite_instance') or connect_data_tools._kite_instance is None:
+            return {'status': 'ERROR', 'message': 'Connection not initialized'}
+        
         cancelled_order_id = connect_data_tools._kite_instance.cancel_order(variety=variety, order_id=order_id)
         
         return {
@@ -194,43 +237,85 @@ def cancel_order(order_id: str, variety: str = 'regular') -> Dict[str, Any]:
 
 def get_portfolio_positions() -> Dict[str, Any]:
     """
-    Get current NIFTY options positions.
+    Get all open NIFTY positions and their P&L.
+    
+    **IMPORTANT**: Only positions with quantity > 0 are considered as "open positions".
+    Positions with quantity = 0 are considered closed and are excluded from the count.
     
     Returns:
         Dict with current positions and P&L
     """
-    if not connect_data_tools._kite_instance:
-        return {'status': 'ERROR', 'message': 'Connection not initialized'}
-    
     try:
+        if connect_data_tools is None:
+            return {'status': 'ERROR', 'message': 'Connection tools not available'}
+        
+        if not hasattr(connect_data_tools, '_kite_instance') or connect_data_tools._kite_instance is None:
+            return {'status': 'ERROR', 'message': 'Connection not initialized'}
+        
         positions = connect_data_tools._kite_instance.positions()
         
         # Filter NIFTY options positions
         nifty_positions = []
+        closed_positions = []  # Track closed positions for reference
         total_pnl = 0
         
         for pos in positions.get('net', []):
             if 'NIFTY' in pos.get('tradingsymbol', ''):
+                quantity = pos.get('quantity', 0)
+                pnl = pos.get('pnl', 0)
+                
                 position_data = {
                     'symbol': pos.get('tradingsymbol'),
-                    'quantity': pos.get('quantity', 0),
+                    'quantity': quantity,
                     'average_price': pos.get('average_price', 0),
                     'last_price': pos.get('last_price', 0),
-                    'pnl': pos.get('pnl', 0),
+                    'pnl': pnl,
                     'product': pos.get('product'),
                     'exchange': pos.get('exchange'),
                     'instrument_type': pos.get('instrument_type')
                 }
-                nifty_positions.append(position_data)
-                total_pnl += pos.get('pnl', 0)
+                
+                # Determine position status based on quantity
+                if quantity > 0:
+                    position_data['current_status'] = 'Open: Active position'
+                    nifty_positions.append(position_data)
+                    total_pnl += pnl
+                elif quantity == 0:
+                    position_data['current_status'] = 'Closed: No position opened'
+                    closed_positions.append(position_data)
+                    # Still include P&L for closed positions in total
+                    total_pnl += pnl
         
-        return {
-            'status': 'SUCCESS',
-            'total_positions': len(nifty_positions),
-            'total_pnl': round(total_pnl, 2),
-            'positions': nifty_positions,
-            'timestamp': dt.datetime.now().isoformat()
-        }
+        # If no open positions but closed positions exist, provide clear status
+        if len(nifty_positions) == 0 and len(closed_positions) > 0:
+            return {
+                'status': 'SUCCESS',
+                'total_positions': 0,  # No open positions
+                'total_pnl': round(total_pnl, 2),
+                'positions': [],  # No open positions
+                'closed_positions': closed_positions,  # Reference to closed positions
+                'portfolio_status': 'All positions closed - clean slate for new trades',
+                'timestamp': dt.datetime.now().isoformat()
+            }
+        elif len(nifty_positions) == 0 and len(closed_positions) == 0:
+            return {
+                'status': 'SUCCESS',
+                'total_positions': 0,
+                'total_pnl': 0,
+                'positions': [],
+                'portfolio_status': 'No NIFTY positions found - clean slate for new trades',
+                'timestamp': dt.datetime.now().isoformat()
+            }
+        else:
+            return {
+                'status': 'SUCCESS',
+                'total_positions': len(nifty_positions),  # Only count open positions
+                'total_pnl': round(total_pnl, 2),
+                'positions': nifty_positions,  # Only open positions
+                'closed_positions': closed_positions,  # Reference to closed positions
+                'portfolio_status': f'{len(nifty_positions)} open positions, {len(closed_positions)} closed positions',
+                'timestamp': dt.datetime.now().isoformat()
+            }
         
     except Exception as e:
         return {
@@ -245,11 +330,16 @@ def get_account_margins() -> Dict[str, Any]:
     
     Returns:
         Dict with margin details
+        Note that if intraday_payin is there then it means that the money has been added today and might not reflect in available_cash
+        and it will be reflected in the next day's available_cash but its available for trading today
     """
-    if not connect_data_tools._kite_instance:
-        return {'status': 'ERROR', 'message': 'Connection not initialized'}
-    
     try:
+        if connect_data_tools is None:
+            return {'status': 'ERROR', 'message': 'Connection tools not available'}
+        
+        if not hasattr(connect_data_tools, '_kite_instance') or connect_data_tools._kite_instance is None:
+            return {'status': 'ERROR', 'message': 'Connection not initialized'}
+        
         margins = connect_data_tools._kite_instance.margins()
         equity_margins = margins.get('equity', {})
         # Calculate true unrealized P&L from open NIFTY positions
@@ -288,10 +378,13 @@ def calculate_strategy_margins(strategy_legs: List[Dict[str, Any]]) -> Dict[str,
     Returns:
         Dict with margin calculations
     """
-    if not connect_data_tools._kite_instance:
-        return {'status': 'ERROR', 'message': 'Connection not initialized'}
-    
     try:
+        if connect_data_tools is None:
+            return {'status': 'ERROR', 'message': 'Connection tools not available'}
+        
+        if not hasattr(connect_data_tools, '_kite_instance') or connect_data_tools._kite_instance is None:
+            return {'status': 'ERROR', 'message': 'Connection not initialized'}
+        
         # Convert strategy legs to margin calculation format
         orders = []
         for leg in strategy_legs:
@@ -346,10 +439,13 @@ def monitor_strategy_pnl(strategy_legs: List[Dict[str, Any]]) -> Dict[str, Any]:
     Returns:
         Dict with current P&L analysis
     """
-    if not connect_data_tools._kite_instance:
-        return {'status': 'ERROR', 'message': 'Connection not initialized'}
-    
     try:
+        if connect_data_tools is None:
+            return {'status': 'ERROR', 'message': 'Connection tools not available'}
+        
+        if not hasattr(connect_data_tools, '_kite_instance') or connect_data_tools._kite_instance is None:
+            return {'status': 'ERROR', 'message': 'Connection not initialized'}
+        
         # Get current quotes for all legs
         symbols = [f"NFO:{leg['symbol']}" for leg in strategy_legs]
         
@@ -411,10 +507,13 @@ def get_orders_history(days: int = 1) -> Dict[str, Any]:
     Returns:
         Dict with orders history
     """
-    if not connect_data_tools._kite_instance:
-        return {'status': 'ERROR', 'message': 'Connection not initialized'}
-    
     try:
+        if connect_data_tools is None:
+            return {'status': 'ERROR', 'message': 'Connection tools not available'}
+        
+        if not hasattr(connect_data_tools, '_kite_instance') or connect_data_tools._kite_instance is None:
+            return {'status': 'ERROR', 'message': 'Connection not initialized'}
+        
         # Get all orders for today
         orders = connect_data_tools._kite_instance.orders()
         

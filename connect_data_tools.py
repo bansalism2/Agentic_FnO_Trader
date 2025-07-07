@@ -361,6 +361,7 @@ def get_options_chain(expiry_date: str = None, expiry_type: str = None, strike_r
 
 
 def get_historical_volatility(days: int = 30) -> dict:
+    # days=max(days, 31)
     """
     Calculate NIFTY historical volatility.
     Args:
@@ -390,8 +391,8 @@ def get_historical_volatility(days: int = 30) -> dict:
             interval='day'
         )
         
-        if len(historical_data) < days:
-            return {'status': 'ERROR', 'message': f'Insufficient data. Got {len(historical_data)} days, need {days}'}
+        # if len(historical_data) < days:
+        #     return {'status': 'ERROR', 'message': f'Insufficient data. Got {len(historical_data)} days, need {days}'}
         
         # Calculate returns and volatility
         prices = [candle['close'] for candle in historical_data]
@@ -505,11 +506,15 @@ def analyze_options_flow(expiry_date: str) -> dict:
 def fetch_historical_data(symbol: str, from_date: str, to_date: str, interval: str = "day") -> dict:
     """
     Fetch historical OHLCV data for a given symbol and date range.
+    
+    **IMPORTANT RESTRICTION**: For intervals other than 'day', the duration is automatically 
+    restricted to 5 days maximum to prevent excessive data requests and API rate limiting.
+    
     Args:
         symbol (str): Trading symbol (e.g., 'NIFTY', 'RELIANCE', etc.). REQUIRED.
         from_date (str): Start date (YYYY-MM-DD). REQUIRED.
         to_date (str): End date (YYYY-MM-DD). REQUIRED.
-        interval (str, optional): Data interval ('day', '5minute', etc.). Defaults to 'day'.
+        interval (str, optional): Data interval ('day', '5minute', '15minute', etc.). Defaults to 'day'.
     Returns:
         dict: Dict with status, data (list of bars), and error message if any.
     Raises:
@@ -517,32 +522,73 @@ def fetch_historical_data(symbol: str, from_date: str, to_date: str, interval: s
     """
     if not symbol or not from_date or not to_date:
         return {'status': 'ERROR', 'message': 'symbol, from_date, and to_date are required'}
+    
     global _kite_instance
     if not _kite_instance:
         return {'status': 'ERROR', 'message': 'Connection not initialized'}
+    
     try:
+        # Apply duration restriction for non-daily intervals
+        adjusted_from_date = from_date
+        adjusted_to_date = to_date
+        duration_restricted = False
+        
+        if interval != "day":
+            # Parse dates to calculate duration
+            from_dt = dt.datetime.strptime(from_date, '%Y-%m-%d')
+            to_dt = dt.datetime.strptime(to_date, '%Y-%m-%d')
+            duration_days = (to_dt - from_dt).days
+            
+            # If duration > 5 days, restrict to last 5 days
+            if duration_days > 5:
+                adjusted_from_date = (to_dt - dt.timedelta(days=5)).strftime('%Y-%m-%d')
+                duration_restricted = True
+        
         # Try NFO first
         if not hasattr(fetch_historical_data, '_nfo_instruments'):
             fetch_historical_data._nfo_instruments = _kite_instance.instruments('NFO')
         nfo_instruments = fetch_historical_data._nfo_instruments
         instrument = next((inst for inst in nfo_instruments if inst['tradingsymbol'] == symbol), None)
+        
         # If not found in NFO, try NSE
         if not instrument:
             if not hasattr(fetch_historical_data, '_nse_instruments'):
                 fetch_historical_data._nse_instruments = _kite_instance.instruments('NSE')
             nse_instruments = fetch_historical_data._nse_instruments
             instrument = next((inst for inst in nse_instruments if inst['tradingsymbol'] == symbol), None)
+        
         if not instrument:
             return {'status': 'ERROR', 'message': f'Instrument not found for symbol: {symbol}'}
+        
         instrument_token = instrument['instrument_token']
-        # Fetch historical data
+        
+        # Fetch historical data with adjusted dates
         data = _kite_instance.historical_data(
             instrument_token=instrument_token,
-            from_date=from_date,
-            to_date=to_date,
+            from_date=adjusted_from_date,
+            to_date=adjusted_to_date,
             interval=interval
         )
-        return {'status': 'SUCCESS', 'symbol': symbol, 'interval': interval, 'from_date': from_date, 'to_date': to_date, 'data': data}
+        
+        response = {
+            'status': 'SUCCESS', 
+            'symbol': symbol, 
+            'interval': interval, 
+            'from_date': adjusted_from_date, 
+            'to_date': adjusted_to_date, 
+            'data': data
+        }
+        
+        # Add warning if duration was restricted
+        if duration_restricted:
+            response['warning'] = f'Duration automatically restricted to 5 days for {interval} interval (original request: {from_date} to {to_date})'
+            response['original_request'] = {
+                'from_date': from_date,
+                'to_date': to_date
+            }
+        
+        return response
+        
     except Exception as e:
         return {'status': 'ERROR', 'message': f'Failed to fetch historical data: {str(e)}'}
 
