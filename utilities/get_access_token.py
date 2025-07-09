@@ -9,7 +9,7 @@ from selenium.webdriver.chrome.service import Service
 from pyotp import TOTP
 
 # Load environment variables from absolute path
-load_dotenv(dotenv_path='./.env')
+load_dotenv(dotenv_path='.././.env')
 
 api_key = os.getenv('kite_api_key')
 api_secret = os.getenv('kite_api_secret')
@@ -78,7 +78,7 @@ def main():
         access_token = data["access_token"]
         print(f"Access token: {access_token}")
         # Save to file
-        with open('access_token.txt', 'w') as f:
+        with open('../data/access_token.txt', 'w') as f:
             f.write(access_token)
         print("Access token saved to access_token.txt")
     except Exception as e:

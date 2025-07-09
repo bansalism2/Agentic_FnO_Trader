@@ -571,6 +571,475 @@ def calculate_probability_of_profit(strategy_legs: List[Dict[str, Any]],
         }
 
 
+def analyze_vix_integration_wrapper() -> Dict[str, Any]:
+    """
+    Wrapper function for VIX integration analysis that automatically fetches required data.
+    
+    Returns:
+        Dict with VIX analysis and volatility regime detection
+    """
+    try:
+        # Import required functions
+        from connect_data_tools import get_nifty_spot_price_safe, get_options_chain_safe, get_historical_volatility
+        
+        # Get current spot price
+        spot_result = get_nifty_spot_price_safe()
+        if spot_result.get('status') != 'SUCCESS':
+            return {
+                'status': 'ERROR',
+                'message': f'Failed to get spot price: {spot_result.get("message", "Unknown error")}'
+            }
+        
+        spot_price = spot_result.get('spot_price', 0)
+        if spot_price <= 0:
+            return {
+                'status': 'ERROR',
+                'message': 'Invalid spot price received'
+            }
+        
+        # Get options chain
+        options_result = get_options_chain_safe()
+        if options_result.get('status') != 'SUCCESS':
+            return {
+                'status': 'ERROR',
+                'message': f'Failed to get options chain: {options_result.get("message", "Unknown error")}'
+            }
+        
+        options_chain = options_result.get('options_chain', [])
+        if not options_chain:
+            return {
+                'status': 'ERROR',
+                'message': 'Empty options chain received'
+            }
+        
+        # Get historical volatility (optional)
+        hist_vol_result = get_historical_volatility(30)
+        historical_volatility = None
+        if hist_vol_result.get('status') == 'SUCCESS':
+            historical_volatility = hist_vol_result.get('volatility', {}).get('annualized', None)
+        
+        # Call the main VIX analysis function
+        return analyze_vix_integration(spot_price, options_chain, historical_volatility)
+        
+    except Exception as e:
+        return {
+            'status': 'ERROR',
+            'message': f'VIX integration wrapper failed: {str(e)}'
+        }
+
+
+def analyze_vix_integration(spot_price: float, options_chain: List[Dict[str, Any]], 
+                          historical_volatility: float = None) -> Dict[str, Any]:
+    """
+    Analyze VIX integration and volatility regime detection for NIFTY options.
+    
+    Args:
+        spot_price: Current NIFTY spot price
+        options_chain: Options chain data with IV information
+        historical_volatility: Historical realized volatility (optional)
+    
+    Returns:
+        Dict with VIX analysis and volatility regime detection
+    """
+    try:
+        # Calculate ATM implied volatility from options chain
+        atm_strike = round(spot_price / 50) * 50  # Round to nearest 50
+        atm_options = [opt for opt in options_chain if abs(opt['strike'] - atm_strike) <= 25]
+        
+        if not atm_options:
+            return {'status': 'ERROR', 'message': 'No ATM options found for VIX calculation'}
+        
+        # Calculate VIX-like measure (30-day implied volatility)
+        call_ivs = []
+        put_ivs = []
+        
+        for opt in atm_options:
+            if 'CE_ltp' in opt and opt['CE_ltp'] > 0:
+                try:
+                    call_iv = calculate_implied_volatility(
+                        opt['CE_ltp'], spot_price, opt['strike'], 30/365, 0.06, 'CE'
+                    )
+                    call_ivs.append(call_iv)
+                except:
+                    pass
+            
+            if 'PE_ltp' in opt and opt['PE_ltp'] > 0:
+                try:
+                    put_iv = calculate_implied_volatility(
+                        opt['PE_ltp'], spot_price, opt['strike'], 30/365, 0.06, 'PE'
+                    )
+                    put_ivs.append(put_iv)
+                except:
+                    pass
+        
+        # Calculate VIX-like measure
+        avg_call_iv = np.mean(call_ivs) if call_ivs else 0.20
+        avg_put_iv = np.mean(put_ivs) if put_ivs else 0.20
+        vix_like = (avg_call_iv + avg_put_iv) / 2
+        
+        # Volatility regime detection
+        if historical_volatility:
+            vol_ratio = vix_like / historical_volatility
+            if vol_ratio > 1.5:
+                regime = "HIGH_STRESS"
+                regime_description = "High implied volatility relative to realized - fear premium"
+            elif vol_ratio > 1.2:
+                regime = "ELEVATED"
+                regime_description = "Elevated implied volatility - cautious market"
+            elif vol_ratio > 0.8:
+                regime = "NORMAL"
+                regime_description = "Normal volatility regime - balanced market"
+            else:
+                regime = "COMPRESSED"
+                regime_description = "Low implied volatility - complacent market"
+        else:
+            # Use absolute VIX levels for regime detection
+            if vix_like > 0.30:
+                regime = "HIGH_STRESS"
+                regime_description = "High volatility regime - market stress"
+            elif vix_like > 0.20:
+                regime = "ELEVATED"
+                regime_description = "Elevated volatility - increased uncertainty"
+            elif vix_like > 0.15:
+                regime = "NORMAL"
+                regime_description = "Normal volatility regime"
+            else:
+                regime = "COMPRESSED"
+                regime_description = "Low volatility regime - market complacency"
+        
+        return {
+            'status': 'SUCCESS',
+            'vix_like_measure': round(vix_like, 4),
+            'call_iv_average': round(avg_call_iv, 4),
+            'put_iv_average': round(avg_put_iv, 4),
+            'volatility_regime': regime,
+            'regime_description': regime_description,
+            'historical_volatility': historical_volatility,
+            'vol_ratio': round(vol_ratio, 3) if historical_volatility else None,
+            'atm_strike_used': atm_strike,
+            'options_analyzed': len(atm_options),
+            'timestamp': dt.datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        return {
+            'status': 'ERROR',
+            'message': f'VIX analysis failed: {str(e)}'
+        }
+
+
+def calculate_iv_rank_analysis_wrapper() -> Dict[str, Any]:
+    """
+    Wrapper function for IV rank analysis that automatically fetches required data.
+    
+    Returns:
+        Dict with IV rank analysis and trading recommendations
+    """
+    try:
+        # Import required functions
+        from connect_data_tools import get_nifty_spot_price_safe, get_options_chain_safe
+        
+        # Get current spot price
+        spot_result = get_nifty_spot_price_safe()
+        if spot_result.get('status') != 'SUCCESS':
+            return {
+                'status': 'ERROR',
+                'message': f'Failed to get spot price: {spot_result.get("message", "Unknown error")}'
+            }
+        
+        spot_price = spot_result.get('spot_price', 0)
+        if spot_price <= 0:
+            return {
+                'status': 'ERROR',
+                'message': 'Invalid spot price received'
+            }
+        
+        # Get options chain
+        options_result = get_options_chain_safe()
+        if options_result.get('status') != 'SUCCESS':
+            return {
+                'status': 'ERROR',
+                'message': f'Failed to get options chain: {options_result.get("message", "Unknown error")}'
+            }
+        
+        options_chain = options_result.get('options_chain', [])
+        if not options_chain:
+            return {
+                'status': 'ERROR',
+                'message': 'Empty options chain received'
+            }
+        
+        # Call the main IV rank analysis function
+        return calculate_iv_rank_analysis(options_chain, spot_price)
+        
+    except Exception as e:
+        return {
+            'status': 'ERROR',
+            'message': f'IV rank analysis wrapper failed: {str(e)}'
+        }
+
+
+def detect_market_regime_wrapper() -> Dict[str, Any]:
+    """
+    Wrapper function for market regime detection that automatically fetches required data.
+    
+    Returns:
+        Dict with market regime detection and strategy recommendations
+    """
+    try:
+        # Import required functions
+        from .connect_data_tools import get_nifty_spot_price_safe, get_options_chain_safe
+        from .master_indicators import get_nifty_technical_analysis_tool
+        
+        # Get current spot price
+        spot_result = get_nifty_spot_price_safe()
+        if spot_result.get('status') != 'SUCCESS':
+            return {
+                'status': 'ERROR',
+                'message': f'Failed to get spot price: {spot_result.get("message", "Unknown error")}'
+            }
+        
+        # Get options chain
+        options_result = get_options_chain_safe()
+        if options_result.get('status') != 'SUCCESS':
+            return {
+                'status': 'ERROR',
+                'message': f'Failed to get options chain: {options_result.get("message", "Unknown error")}'
+            }
+        
+        options_chain = options_result.get('options_chain', [])
+        if not options_chain:
+            return {
+                'status': 'ERROR',
+                'message': 'Empty options chain received'
+            }
+        
+        # Get technical indicators
+        tech_result = get_nifty_technical_analysis_tool()
+        if 'error' in tech_result:
+            return {
+                'status': 'ERROR',
+                'message': f'Failed to get technical analysis: {tech_result.get("error", "Unknown error")}'
+            }
+        
+        technical_indicators = tech_result
+        
+        # Get VIX analysis for volatility data
+        vix_result = analyze_vix_integration_wrapper()
+        volatility_data = vix_result if vix_result.get('status') == 'SUCCESS' else {
+            'volatility_regime': 'NORMAL'
+        }
+        
+        # Call the main market regime detection function
+        return detect_market_regime(technical_indicators, volatility_data, options_chain)
+        
+    except Exception as e:
+        return {
+            'status': 'ERROR',
+            'message': f'Market regime detection wrapper failed: {str(e)}'
+        }
+
+
+def calculate_iv_rank_analysis(options_chain: List[Dict[str, Any]], 
+                             spot_price: float, 
+                             historical_iv_data: List[float] = None) -> Dict[str, Any]:
+    """
+    Calculate IV Rank and provide premium buying vs selling decisions.
+    
+    Args:
+        options_chain: Current options chain data
+        spot_price: Current spot price
+        historical_iv_data: Historical IV data for percentile calculation (optional)
+    
+    Returns:
+        Dict with IV rank analysis and trading recommendations
+    """
+    try:
+        # Calculate current ATM implied volatility
+        atm_strike = round(spot_price / 50) * 50
+        atm_options = [opt for opt in options_chain if abs(opt['strike'] - atm_strike) <= 25]
+        
+        if not atm_options:
+            return {'status': 'ERROR', 'message': 'No ATM options found for IV analysis'}
+        
+        # Calculate current IV
+        current_ivs = []
+        for opt in atm_options:
+            if 'CE_ltp' in opt and opt['CE_ltp'] > 0:
+                try:
+                    iv = calculate_implied_volatility(
+                        opt['CE_ltp'], spot_price, opt['strike'], 30/365, 0.06, 'CE'
+                    )
+                    current_ivs.append(iv)
+                except:
+                    pass
+        
+        if not current_ivs:
+            return {'status': 'ERROR', 'message': 'Could not calculate current IV'}
+        
+        current_iv = np.mean(current_ivs)
+        
+        # Calculate IV Rank and Percentile
+        if historical_iv_data and len(historical_iv_data) > 30:
+            # Use provided historical data
+            iv_rank = (current_iv - min(historical_iv_data)) / (max(historical_iv_data) - min(historical_iv_data))
+            iv_percentile = len([x for x in historical_iv_data if x <= current_iv]) / len(historical_iv_data)
+        else:
+            # Use estimated ranges based on market conditions
+            # These are typical ranges for NIFTY options
+            iv_min = 0.10  # 10% minimum
+            iv_max = 0.50  # 50% maximum
+            iv_rank = (current_iv - iv_min) / (iv_max - iv_min)
+            iv_rank = max(0, min(1, iv_rank))  # Clamp between 0 and 1
+            
+            # Estimate percentile based on typical distribution
+            if current_iv <= 0.15:
+                iv_percentile = 0.25
+            elif current_iv <= 0.20:
+                iv_percentile = 0.50
+            elif current_iv <= 0.25:
+                iv_percentile = 0.75
+            else:
+                iv_percentile = 0.90
+        
+        return {
+            'status': 'SUCCESS',
+            'current_iv': round(current_iv, 4),
+            'iv_rank': round(iv_rank, 3),
+            'iv_percentile': round(iv_percentile, 3),
+            'atm_strike_used': atm_strike,
+            'historical_data_used': historical_iv_data is not None,
+            'timestamp': dt.datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        return {
+            'status': 'ERROR',
+            'message': f'IV Rank analysis failed: {str(e)}'
+        }
+
+
+def detect_market_regime(technical_indicators: Dict[str, Any], 
+                        volatility_data: Dict[str, Any],
+                        options_chain: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """
+    Detect market regime for strategy selection.
+    
+    Args:
+        technical_indicators: Technical analysis results
+        volatility_data: Volatility analysis data
+        options_chain: Options chain data
+    
+    Returns:
+        Dict with market regime detection and strategy recommendations
+    """
+    try:
+        # Extract key indicators
+        rsi = technical_indicators.get('latest_indicator_values', {}).get('rsi', 50)
+        adx = technical_indicators.get('latest_indicator_values', {}).get('adx', 20)
+        macd_signal = technical_indicators.get('trading_signals', {}).get('macd', 'NEUTRAL')
+        supertrend_signal = technical_indicators.get('trading_signals', {}).get('supertrend', 'NEUTRAL')
+        
+        # Volatility regime
+        vol_regime = volatility_data.get('volatility_regime', 'NORMAL')
+        
+        # Calculate Put-Call Ratio
+        total_call_oi = sum(opt.get('CE_oi', 0) for opt in options_chain)
+        total_put_oi = sum(opt.get('PE_oi', 0) for opt in options_chain)
+        pcr = total_put_oi / total_call_oi if total_call_oi > 0 else 1.0
+        
+        # Market regime detection logic
+        regime_scores = {
+            'TRENDING_BULL': 0,
+            'TRENDING_BEAR': 0,
+            'RANGING': 0,
+            'VOLATILE': 0,
+            'COMPRESSED': 0
+        }
+        
+        # Trend analysis
+        if adx > 25:  # Strong trend
+            if macd_signal == 'BUY' and supertrend_signal == 'BUY':
+                regime_scores['TRENDING_BULL'] += 3
+            elif macd_signal == 'SELL' and supertrend_signal == 'SELL':
+                regime_scores['TRENDING_BEAR'] += 3
+        else:  # Weak trend
+            regime_scores['RANGING'] += 2
+        
+        # RSI analysis
+        if rsi > 70:
+            regime_scores['TRENDING_BULL'] += 1
+        elif rsi < 30:
+            regime_scores['TRENDING_BEAR'] += 1
+        elif 40 <= rsi <= 60:
+            regime_scores['RANGING'] += 1
+        
+        # Volatility analysis
+        if vol_regime == 'HIGH_STRESS':
+            regime_scores['VOLATILE'] += 3
+        elif vol_regime == 'COMPRESSED':
+            regime_scores['COMPRESSED'] += 3
+        elif vol_regime == 'ELEVATED':
+            regime_scores['VOLATILE'] += 1
+        
+        # PCR analysis
+        if pcr > 1.2:  # Bearish sentiment
+            regime_scores['TRENDING_BEAR'] += 1
+        elif pcr < 0.8:  # Bullish sentiment
+            regime_scores['TRENDING_BULL'] += 1
+        else:  # Neutral sentiment
+            regime_scores['RANGING'] += 1
+        
+        # Determine primary regime
+        primary_regime = max(regime_scores, key=regime_scores.get)
+        
+        # Market sentiment analysis
+        sentiment = 'BULLISH' if pcr < 0.8 else 'BEARISH' if pcr > 1.2 else 'NEUTRAL'
+        
+        return {
+            'status': 'SUCCESS',
+            'primary_regime': primary_regime,
+            'regime_scores': regime_scores,
+            'technical_indicators': {
+                'rsi': round(rsi, 2),
+                'adx': round(adx, 2),
+                'macd_signal': macd_signal,
+                'supertrend_signal': supertrend_signal
+            },
+            'volatility_regime': vol_regime,
+            'put_call_ratio': round(pcr, 3),
+            'market_sentiment': sentiment,
+            'confidence_score': round(max(regime_scores.values()) / 5, 2),
+            'timestamp': dt.datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        return {
+            'status': 'ERROR',
+            'message': f'Market regime detection failed: {str(e)}'
+        }
+
+
+def calculate_pnl_percentage(pnl, avg_price, quantity):
+    """
+    Calculate the P&L percentage for a position.
+    Args:
+        pnl (float): The profit or loss for the position.
+        avg_price (float): The average price of the position.
+        quantity (int): The quantity of the position.
+    Returns:
+        float: The P&L percentage, or 0 if avg_price or quantity is zero.
+    """
+    try:
+        if avg_price and quantity:
+            return (pnl / (avg_price * abs(quantity))) * 100
+        else:
+            return 0.0
+    except Exception as e:
+        print(f"Error calculating P&L percentage: {e}")
+        return 0.0
+
+
 # Calculation and Analysis Tools Registry
 CALCULATION_ANALYSIS_TOOLS = {
     'calculate_option_greeks': calculate_option_greeks,
@@ -579,7 +1048,10 @@ CALCULATION_ANALYSIS_TOOLS = {
     'find_arbitrage_opportunities': find_arbitrage_opportunities,
     'calculate_portfolio_greeks': calculate_portfolio_greeks,
     'calculate_volatility_surface': calculate_volatility_surface,
-    'calculate_probability_of_profit': calculate_probability_of_profit
+    'calculate_probability_of_profit': calculate_probability_of_profit,
+    'analyze_vix_integration_wrapper': analyze_vix_integration_wrapper,
+    'calculate_iv_rank_analysis_wrapper': calculate_iv_rank_analysis_wrapper,
+    'detect_market_regime_wrapper': detect_market_regime_wrapper
 }
 
 

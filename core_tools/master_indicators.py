@@ -15,7 +15,7 @@ import datetime as dt
 import os
 import sys
 import warnings
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 
 # Suppress warnings
 warnings.filterwarnings('ignore', category=FutureWarning)
@@ -442,14 +442,28 @@ def get_kite_connection() -> KiteConnect:
         if not api_key or not api_secret:
             raise ValueError("API key or secret not found in .env file")
         
-        # Read access token from access_token.txt
+        # Read access token from access_token.txt - try multiple paths
         access_token = None
-        if os.path.exists("access_token.txt"):
-            with open("access_token.txt", "r") as f:
-                access_token = f.read().strip()
+        access_token_paths = [
+            "access_token.txt",  # Current directory
+            "../data/access_token.txt",  # Relative to agent_tools
+            "../../data/access_token.txt",  # Relative to core_tools
+            "./data/access_token.txt"  # Alternative relative path
+        ]
+        
+        for path in access_token_paths:
+            if os.path.exists(path):
+                try:
+                    with open(path, "r") as f:
+                        access_token = f.read().strip()
+                        print(f"✅ Successfully loaded access token from: {path}")
+                        break
+                except Exception as e:
+                    print(f"❌ Error reading access token from {path}: {e}")
+                    continue
         
         if not access_token:
-            raise ValueError("Access token not found in access_token.txt")
+            raise ValueError("Access token not found in any expected location")
         
         # Initialize Kite Connect
         kite = KiteConnect(api_key=api_key)
@@ -663,4 +677,491 @@ if __name__ == "__main__":
                     print(f"{pattern_name}: DETECTED")
             
     except Exception as e:
-        print(f"Error running analysis: {str(e)}") 
+        print(f"Error running analysis: {str(e)}")
+
+
+def get_nifty_technical_analysis_tool(days: int = 2, interval: str = "15minute"):
+    """
+    Run full NIFTY technical analysis (OHLCV, indicators, signals) for the given days and interval.
+    
+    Valid intervals and maximum days:
+    - minute: 60 days
+    - 3minute: 100 days  
+    - 5minute: 100 days
+    - 10minute: 100 days
+    - 15minute: 200 days
+    - 30minute: 200 days
+    - 60minute: 400 days
+    - day: 2000 days
+    
+    Args:
+        days (int): Number of days of historical data (limited by interval)
+        interval (str): Data interval from the valid list above
+    
+    Returns:
+        dict: Complete NIFTY technical analysis with indicators and signals
+        
+    Example usage: get_nifty_technical_analysis_tool(days=4, interval="15minute")
+    """
+    return get_nifty_technical_analysis(days=days, interval=interval)
+
+
+def calculate_pcr_technical_analysis_wrapper() -> Dict[str, Any]:
+    """
+    Wrapper function for PCR + Technical analysis that automatically fetches required data.
+    
+    Returns:
+        Dict with PCR + Technical analysis for entry timing
+    """
+    try:
+        # Import required functions
+        from connect_data_tools import get_nifty_spot_price_safe, get_options_chain_safe
+        
+        # Get current spot price
+        spot_result = get_nifty_spot_price_safe()
+        if spot_result.get('status') != 'SUCCESS':
+            return {
+                'status': 'ERROR',
+                'message': f'Failed to get spot price: {spot_result.get("message", "Unknown error")}'
+            }
+        
+        spot_price = spot_result.get('spot_price', 0)
+        if spot_price <= 0:
+            return {
+                'status': 'ERROR',
+                'message': 'Invalid spot price received'
+            }
+        
+        # Get options chain
+        options_result = get_options_chain_safe()
+        if options_result.get('status') != 'SUCCESS':
+            return {
+                'status': 'ERROR',
+                'message': f'Failed to get options chain: {options_result.get("message", "Unknown error")}'
+            }
+        
+        options_chain = options_result.get('options_chain', [])
+        if not options_chain:
+            return {
+                'status': 'ERROR',
+                'message': 'Empty options chain received'
+            }
+        
+        # Get technical indicators
+        tech_result = get_nifty_technical_analysis_tool()
+        if 'error' in tech_result:
+            return {
+                'status': 'ERROR',
+                'message': f'Failed to get technical analysis: {tech_result.get("error", "Unknown error")}'
+            }
+        
+        technical_indicators = tech_result
+        
+        # Call the main PCR + Technical analysis function
+        return calculate_pcr_technical_analysis(options_chain, technical_indicators, spot_price)
+        
+    except Exception as e:
+        return {
+            'status': 'ERROR',
+            'message': f'PCR + Technical analysis wrapper failed: {str(e)}'
+        }
+
+
+def analyze_pcr_extremes_wrapper() -> Dict[str, Any]:
+    """
+    Wrapper function for PCR extremes analysis that automatically fetches required data.
+    
+    Returns:
+        Dict with PCR extremes analysis for contrarian opportunities
+    """
+    try:
+        # Import required functions
+        from connect_data_tools import get_options_chain_safe
+        
+        # Get options chain
+        options_result = get_options_chain_safe()
+        if options_result.get('status') != 'SUCCESS':
+            return {
+                'status': 'ERROR',
+                'message': f'Failed to get options chain: {options_result.get("message", "Unknown error")}'
+            }
+        
+        options_chain = options_result.get('options_chain', [])
+        if not options_chain:
+            return {
+                'status': 'ERROR',
+                'message': 'Empty options chain received'
+            }
+        
+        # Call the main PCR extremes analysis function
+        return analyze_pcr_extremes(options_chain, lookback_days=30)
+        
+    except Exception as e:
+        return {
+            'status': 'ERROR',
+            'message': f'PCR extremes analysis wrapper failed: {str(e)}'
+        }
+
+
+def calculate_pcr_technical_analysis(options_chain: List[Dict[str, Any]], 
+                                   technical_indicators: Dict[str, Any],
+                                   spot_price: float) -> Dict[str, Any]:
+    """
+    Combine Put-Call Ratio analysis with technical indicators for entry timing.
+    
+    Args:
+        options_chain: Options chain data with OI information
+        technical_indicators: Technical analysis results
+        spot_price: Current spot price
+    
+    Returns:
+        Dict with PCR + Technical analysis for entry timing
+    """
+    try:
+        # Calculate Put-Call Ratio
+        total_call_oi = sum(opt.get('CE_oi', 0) for opt in options_chain)
+        total_put_oi = sum(opt.get('PE_oi', 0) for opt in options_chain)
+        pcr = total_put_oi / total_call_oi if total_call_oi > 0 else 1.0
+        
+        # Extract technical indicators
+        rsi = technical_indicators.get('latest_indicator_values', {}).get('rsi', 50)
+        adx = technical_indicators.get('latest_indicator_values', {}).get('adx', 20)
+        macd_signal = technical_indicators.get('trading_signals', {}).get('macd', 'NEUTRAL')
+        supertrend_signal = technical_indicators.get('trading_signals', {}).get('supertrend', 'NEUTRAL')
+        bb_signal = technical_indicators.get('trading_signals', {}).get('bollinger_bands', 'NEUTRAL')
+        
+        # PCR Sentiment Analysis
+        if pcr > 1.5:
+            pcr_sentiment = "EXTREME_BEARISH"
+            pcr_strength = "Very Strong"
+        elif pcr > 1.2:
+            pcr_sentiment = "BEARISH"
+            pcr_strength = "Strong"
+        elif pcr > 0.9:
+            pcr_sentiment = "SLIGHTLY_BEARISH"
+            pcr_strength = "Moderate"
+        elif pcr > 0.7:
+            pcr_sentiment = "SLIGHTLY_BULLISH"
+            pcr_strength = "Moderate"
+        elif pcr > 0.5:
+            pcr_sentiment = "BULLISH"
+            pcr_strength = "Strong"
+        else:
+            pcr_sentiment = "EXTREME_BULLISH"
+            pcr_strength = "Very Strong"
+        
+        # Technical Analysis Scoring
+        technical_score = 0
+        technical_signals = []
+        
+        # RSI Analysis
+        if rsi < 30:
+            technical_score += 2
+            technical_signals.append("RSI oversold - bullish signal")
+        elif rsi > 70:
+            technical_score -= 2
+            technical_signals.append("RSI overbought - bearish signal")
+        elif 40 <= rsi <= 60:
+            technical_score += 0
+            technical_signals.append("RSI neutral")
+        
+        # ADX Analysis (trend strength)
+        if adx > 25:
+            technical_signals.append("Strong trend detected")
+            if macd_signal == 'BUY' and supertrend_signal == 'BUY':
+                technical_score += 3
+                technical_signals.append("Strong bullish trend")
+            elif macd_signal == 'SELL' and supertrend_signal == 'SELL':
+                technical_score -= 3
+                technical_signals.append("Strong bearish trend")
+        else:
+            technical_signals.append("Weak trend - ranging market")
+        
+        # MACD Analysis
+        if macd_signal == 'BUY':
+            technical_score += 1
+            technical_signals.append("MACD bullish")
+        elif macd_signal == 'SELL':
+            technical_score -= 1
+            technical_signals.append("MACD bearish")
+        
+        # SuperTrend Analysis
+        if supertrend_signal == 'BUY':
+            technical_score += 1
+            technical_signals.append("SuperTrend bullish")
+        elif supertrend_signal == 'SELL':
+            technical_score -= 1
+            technical_signals.append("SuperTrend bearish")
+        
+        # Bollinger Bands Analysis
+        if bb_signal == 'BUY':
+            technical_score += 1
+            technical_signals.append("Price near BB lower band - potential bounce")
+        elif bb_signal == 'SELL':
+            technical_score -= 1
+            technical_signals.append("Price near BB upper band - potential reversal")
+        
+        # Combined Analysis for Entry Timing
+        entry_signals = []
+        entry_confidence = 0
+        
+        # PCR + Technical Convergence Analysis
+        if pcr_sentiment in ["EXTREME_BULLISH", "BULLISH"] and technical_score >= 2:
+            entry_signals.append("STRONG_BUY")
+            entry_confidence = 8
+            reasoning = "PCR shows extreme bullish sentiment + strong technical bullish signals"
+        elif pcr_sentiment in ["EXTREME_BEARISH", "BEARISH"] and technical_score <= -2:
+            entry_signals.append("STRONG_SELL")
+            entry_confidence = 8
+            reasoning = "PCR shows extreme bearish sentiment + strong technical bearish signals"
+        elif pcr_sentiment in ["SLIGHTLY_BULLISH", "BULLISH"] and technical_score >= 1:
+            entry_signals.append("BUY")
+            entry_confidence = 6
+            reasoning = "PCR shows bullish sentiment + technical bullish signals"
+        elif pcr_sentiment in ["SLIGHTLY_BEARISH", "BEARISH"] and technical_score <= -1:
+            entry_signals.append("SELL")
+            entry_confidence = 6
+            reasoning = "PCR shows bearish sentiment + technical bearish signals"
+        elif abs(technical_score) <= 1 and pcr_sentiment in ["SLIGHTLY_BULLISH", "SLIGHTLY_BEARISH"]:
+            entry_signals.append("NEUTRAL")
+            entry_confidence = 4
+            reasoning = "Mixed signals - wait for clearer confirmation"
+        else:
+            entry_signals.append("WAIT")
+            entry_confidence = 3
+            reasoning = "Conflicting signals - PCR and technical analysis diverge"
+        
+        # Entry Timing Recommendations
+        timing_recommendations = {
+            "STRONG_BUY": {
+                "action": "Immediate entry recommended",
+                "strategy": "Long calls, call debit spreads, bull put spreads",
+                "risk_level": "Moderate",
+                "stop_loss": "Below recent support levels"
+            },
+            "BUY": {
+                "action": "Consider entry on pullbacks",
+                "strategy": "Long calls, call debit spreads",
+                "risk_level": "Conservative",
+                "stop_loss": "Below entry price - 2%"
+            },
+            "STRONG_SELL": {
+                "action": "Immediate entry recommended",
+                "strategy": "Long puts, put debit spreads, bear call spreads",
+                "risk_level": "Moderate",
+                "stop_loss": "Above recent resistance levels"
+            },
+            "SELL": {
+                "action": "Consider entry on rallies",
+                "strategy": "Long puts, put debit spreads",
+                "risk_level": "Conservative",
+                "stop_loss": "Above entry price + 2%"
+            },
+            "NEUTRAL": {
+                "action": "Wait for clearer signals",
+                "strategy": "Iron condor, calendar spreads",
+                "risk_level": "Conservative",
+                "stop_loss": "N/A - wait for entry"
+            },
+            "WAIT": {
+                "action": "Avoid new positions",
+                "strategy": "Manage existing positions only",
+                "risk_level": "Very Conservative",
+                "stop_loss": "N/A - no new entries"
+            }
+        }
+        
+        return {
+            'status': 'SUCCESS',
+            'put_call_ratio': round(pcr, 3),
+            'pcr_sentiment': pcr_sentiment,
+            'pcr_strength': pcr_strength,
+            'technical_score': technical_score,
+            'technical_signals': technical_signals,
+            'entry_signal': entry_signals[0],
+            'entry_confidence': entry_confidence,
+            'reasoning': reasoning,
+            'timing_recommendations': timing_recommendations[entry_signals[0]],
+            'key_indicators': {
+                'rsi': round(rsi, 2),
+                'adx': round(adx, 2),
+                'macd_signal': macd_signal,
+                'supertrend_signal': supertrend_signal,
+                'bb_signal': bb_signal
+            },
+            'timestamp': dt.datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        return {
+            'status': 'ERROR',
+            'message': f'PCR + Technical analysis failed: {str(e)}'
+        }
+
+
+def analyze_pcr_extremes(options_chain: List[Dict[str, Any]], 
+                        lookback_days: int = 30) -> Dict[str, Any]:
+    """
+    Analyze PCR extremes for contrarian trading opportunities.
+    
+    Args:
+        options_chain: Current options chain data
+        lookback_days: Number of days for historical comparison
+    
+    Returns:
+        Dict with PCR extreme analysis
+    """
+    try:
+        # Calculate current PCR
+        total_call_oi = sum(opt.get('CE_oi', 0) for opt in options_chain)
+        total_put_oi = sum(opt.get('PE_oi', 0) for opt in options_chain)
+        current_pcr = total_put_oi / total_call_oi if total_call_oi > 0 else 1.0
+        
+        # Simulate historical PCR data (in real implementation, this would come from database)
+        # For now, using typical PCR ranges for NIFTY
+        typical_pcr_range = [0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.4, 1.5]
+        
+        # Calculate PCR percentile
+        pcr_percentile = len([x for x in typical_pcr_range if x <= current_pcr]) / len(typical_pcr_range)
+        
+        # Extreme PCR Analysis
+        if pcr_percentile >= 0.90:
+            extreme_type = "EXTREME_BEARISH"
+            contrarian_signal = "STRONG_BUY"
+            reasoning = "PCR at extreme bearish levels - contrarian bullish opportunity"
+            strategy = "Long calls, call debit spreads, bull put spreads"
+        elif pcr_percentile >= 0.80:
+            extreme_type = "BEARISH"
+            contrarian_signal = "BUY"
+            reasoning = "PCR at bearish levels - potential bullish reversal"
+            strategy = "Long calls, call debit spreads"
+        elif pcr_percentile <= 0.10:
+            extreme_type = "EXTREME_BULLISH"
+            contrarian_signal = "STRONG_SELL"
+            reasoning = "PCR at extreme bullish levels - contrarian bearish opportunity"
+            strategy = "Long puts, put debit spreads, bear call spreads"
+        elif pcr_percentile <= 0.20:
+            extreme_type = "BULLISH"
+            contrarian_signal = "SELL"
+            reasoning = "PCR at bullish levels - potential bearish reversal"
+            strategy = "Long puts, put debit spreads"
+        else:
+            extreme_type = "NORMAL"
+            contrarian_signal = "NEUTRAL"
+            reasoning = "PCR within normal range - no extreme signals"
+            strategy = "Standard strategies based on other indicators"
+        
+        # Risk management for extreme PCR trades
+        risk_management = {
+            "EXTREME_BEARISH": {
+                "position_size": "Aggressive (70-80% of capital)",
+                "stop_loss": "Wide (15-20% of premium)",
+                "profit_target": "200-300% of premium",
+                "timeframe": "1-3 days for extreme moves"
+            },
+            "BEARISH": {
+                "position_size": "Moderate (50-60% of capital)",
+                "stop_loss": "Standard (10-15% of premium)",
+                "profit_target": "100-150% of premium",
+                "timeframe": "3-7 days"
+            },
+            "EXTREME_BULLISH": {
+                "position_size": "Aggressive (70-80% of capital)",
+                "stop_loss": "Wide (15-20% of premium)",
+                "profit_target": "200-300% of premium",
+                "timeframe": "1-3 days for extreme moves"
+            },
+            "BULLISH": {
+                "position_size": "Moderate (50-60% of capital)",
+                "stop_loss": "Standard (10-15% of premium)",
+                "profit_target": "100-150% of premium",
+                "timeframe": "3-7 days"
+            },
+            "NORMAL": {
+                "position_size": "Standard (40-50% of capital)",
+                "stop_loss": "Standard (8-12% of premium)",
+                "profit_target": "50-100% of premium",
+                "timeframe": "5-10 days"
+            }
+        }
+        
+        return {
+            'status': 'SUCCESS',
+            'current_pcr': round(current_pcr, 3),
+            'pcr_percentile': round(pcr_percentile, 3),
+            'extreme_type': extreme_type,
+            'contrarian_signal': contrarian_signal,
+            'reasoning': reasoning,
+            'recommended_strategy': strategy,
+            'risk_management': risk_management[extreme_type],
+            'lookback_period': f"{lookback_days} days",
+            'timestamp': dt.datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        return {
+            'status': 'ERROR',
+            'message': f'PCR extremes analysis failed: {str(e)}'
+        }
+
+
+# Add new functions to the registry
+MASTER_INDICATORS_TOOLS = {
+    'get_nifty_technical_analysis_tool': get_nifty_technical_analysis_tool,
+    'calculate_pcr_technical_analysis': calculate_pcr_technical_analysis_wrapper,
+    'analyze_pcr_extremes': analyze_pcr_extremes_wrapper
+}
+
+
+def get_nifty_daily_technical_analysis_wrapper(days: int = 60) -> Dict[str, Any]:
+    """
+    Wrapper function for daily NIFTY technical analysis with robust error handling.
+    
+    Args:
+        days: Number of days of historical data (default: 60 for sufficient indicator calculation)
+    
+    Returns:
+        Dict with daily technical analysis or fallback analysis
+    """
+    try:
+        # Try with the requested number of days
+        result = get_nifty_technical_analysis(days=days, interval="day")
+        
+        if 'error' in result:
+            # If insufficient data, try with more days
+            if 'Insufficient data' in result.get('error', ''):
+                print(f"Warning: Insufficient data for {days} days, trying with 90 days...")
+                result = get_nifty_technical_analysis(days=90, interval="day")
+                
+                if 'error' in result:
+                    # If still insufficient, try with 120 days
+                    if 'Insufficient data' in result.get('error', ''):
+                        print(f"Warning: Still insufficient data, trying with 120 days...")
+                        result = get_nifty_technical_analysis(days=120, interval="day")
+                        
+                        if 'error' in result:
+                            # Final fallback: return basic analysis with available data
+                            return {
+                                'status': 'PARTIAL_SUCCESS',
+                                'message': f'Limited daily data available: {result.get("error", "Unknown error")}',
+                                'analysis_type': 'daily_fallback',
+                                'recommendation': 'Use intraday analysis for current market conditions',
+                                'data_quality': 'limited'
+                            }
+        
+        # If successful, add metadata
+        if 'error' not in result:
+            result['analysis_type'] = 'daily_complete'
+            result['data_quality'] = 'full'
+            result['days_analyzed'] = days
+        
+        return result
+        
+    except Exception as e:
+        return {
+            'status': 'ERROR',
+            'message': f'Daily technical analysis failed: {str(e)}',
+            'analysis_type': 'daily_error',
+            'recommendation': 'Fall back to intraday analysis only',
+            'data_quality': 'none'
+        } 

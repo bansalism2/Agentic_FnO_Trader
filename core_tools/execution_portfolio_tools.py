@@ -14,13 +14,21 @@ Author: AI Assistant
 
 import json
 import datetime as dt
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Union
 
 # Global variable to hold connect_data_tools module
 connect_data_tools = None
 
 # Import connection tools (assumes file 1 is available)
 try:
+    import sys
+    import os
+    
+    # Add current directory to path for imports
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    if current_dir not in sys.path:
+        sys.path.insert(0, current_dir)
+    
     import connect_data_tools
     from connect_data_tools import (
         initialize_connection, get_nifty_spot_price, 
@@ -34,15 +42,54 @@ try:
         try:
             from dotenv import load_dotenv
             import os
-            load_dotenv(dotenv_path='./.env')
+            # Try multiple possible paths for .env file
+            env_paths = [
+                './.env',  # Current directory
+                '../.env',  # Relative to agent_tools
+                '../../.env',  # Relative to core_tools
+                './.env'  # Alternative relative path
+            ]
+            
+            env_loaded = False
+            for env_path in env_paths:
+                try:
+                    load_dotenv(dotenv_path=env_path)
+                    print(f"✅ Successfully loaded .env from: {env_path}")
+                    env_loaded = True
+                    break
+                except Exception:
+                    continue
+                    
+            if not env_loaded:
+                print("❌ Could not find .env file in any expected location")
             api_key = os.getenv("kite_api_key")
             api_secret = os.getenv("kite_api_secret")
             access_token = None
             try:
-                with open("access_token.txt", "r") as f:
-                    access_token = f.read().strip()
-            except Exception:
-                pass
+                # Try multiple possible paths for access token
+                access_token_paths = [
+                    "access_token.txt",  # Current directory
+                    "../data/access_token.txt",  # Relative to agent_tools
+                    "../../data/access_token.txt",  # Relative to core_tools
+                    "./data/access_token.txt"  # Alternative relative path
+                ]
+                
+                access_token = None
+                for path in access_token_paths:
+                    try:
+                        with open(path, "r") as f:
+                            access_token = f.read().strip()
+                            print(f"✅ Successfully loaded access token from: {path}")
+                            break
+                    except Exception:
+                        continue
+                        
+                if access_token is None:
+                    print("❌ Could not find access_token.txt in any expected location")
+                    
+            except Exception as e:
+                print(f"❌ Error reading access token: {e}")
+                access_token = None
             
             if api_key and (api_secret or access_token):
                 init_result = initialize_connection(api_key, api_secret, access_token)
@@ -239,8 +286,10 @@ def get_portfolio_positions() -> Dict[str, Any]:
     """
     Get all open NIFTY positions and their P&L.
     
-    **IMPORTANT**: Only positions with quantity > 0 are considered as "open positions".
-    Positions with quantity = 0 are considered closed and are excluded from the count.
+    **IMPORTANT**: Positions with quantity != 0 (both positive and negative) are considered as "open positions".
+    - Positive quantity (> 0): Long positions (bought options)
+    - Negative quantity (< 0): Short positions (sold options)
+    - Zero quantity (= 0): Closed positions (no active position)
     
     Returns:
         Dict with current positions and P&L
@@ -276,7 +325,7 @@ def get_portfolio_positions() -> Dict[str, Any]:
                 }
                 
                 # Determine position status based on quantity
-                if quantity > 0:
+                if quantity != 0:  # Any non-zero quantity (positive or negative) is an open position
                     position_data['current_status'] = 'Open: Active position'
                     nifty_positions.append(position_data)
                     total_pnl += pnl
@@ -758,6 +807,485 @@ def get_risk_metrics() -> Dict[str, Any]:
         }
 
 
+def execute_and_store_strategy(strategy_legs: List[Dict[str, Any]], trade_metadata: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """
+    Execute a strategy and store it in trade storage ONLY if execution is successful.
+    
+    Args:
+        strategy_legs: List of strategy legs with order details
+        trade_metadata: Additional trade information (analysis data, risk management, etc.)
+                       Can also be a strategy creation result dict with 'legs' key
+    
+    Returns:
+        Dict with execution result and storage status
+    """
+    try:
+        # Handle case where trade_metadata is actually a strategy creation result
+        if trade_metadata and 'legs' in trade_metadata:
+            # This is a strategy creation result, extract the legs and metadata
+            strategy_legs = trade_metadata['legs']
+            strategy_metadata = {
+                'strategy_name': trade_metadata.get('strategy_name', 'Unknown Strategy'),
+                'expiry_date': trade_metadata.get('expiry_date'),
+                'spot_price': trade_metadata.get('spot_price'),
+                'strategy_type': trade_metadata.get('strategy_name', 'Unknown Strategy'),
+                'risk_management': trade_metadata.get('strategy_metrics', {}),
+                'analysis_data': {
+                    'market_outlook': trade_metadata.get('market_outlook', ''),
+                    'strategy_metrics': trade_metadata.get('strategy_metrics', {}),
+                    'atm_strike': trade_metadata.get('atm_strike'),
+                    'creation_timestamp': trade_metadata.get('timestamp')
+                }
+            }
+        else:
+            # Use provided trade_metadata as is
+            strategy_metadata = trade_metadata or {}
+        
+        # First execute the strategy
+        execution_result = execute_options_strategy(strategy_legs)
+        
+        if execution_result.get('status') != 'SUCCESS':
+            return {
+                'status': 'EXECUTION_FAILED',
+                'execution_result': execution_result,
+                'storage_result': None,
+                'message': f'Strategy execution failed: {execution_result.get("message", "Unknown error")}'
+            }
+        
+        # If execution successful, store the trade
+        try:
+            from trade_storage import write_successful_trade
+            
+            # Prepare trade data for storage
+            trade_data = {
+                'strategy_name': strategy_metadata.get('strategy_name', 'Unknown Strategy'),
+                'legs': strategy_legs,
+                'expiry_date': strategy_metadata.get('expiry_date'),
+                'spot_price': strategy_metadata.get('spot_price'),
+                'strategy_type': strategy_metadata.get('strategy_type'),
+                'risk_management': strategy_metadata.get('risk_management', {}),
+                'analysis_data': strategy_metadata.get('analysis_data', {}),
+                'execution_details': execution_result
+            }
+            
+            storage_result = write_successful_trade(trade_data)
+            
+            return {
+                'status': 'SUCCESS',
+                'execution_result': execution_result,
+                'storage_result': storage_result,
+                'trade_id': storage_result.get('trade_id'),
+                'message': f'Strategy executed and stored successfully. Trade ID: {storage_result.get("trade_id")}'
+            }
+            
+        except ImportError:
+            # If trade storage is not available, still return execution success
+            return {
+                'status': 'EXECUTION_SUCCESS_STORAGE_UNAVAILABLE',
+                'execution_result': execution_result,
+                'storage_result': None,
+                'message': 'Strategy executed successfully but trade storage not available'
+            }
+            
+    except Exception as e:
+        return {
+            'status': 'ERROR',
+            'execution_result': None,
+            'storage_result': None,
+            'message': f'Execute and store failed: {str(e)}'
+        }
+
+
+def validate_general_capital() -> Dict[str, Any]:
+    """
+    Wrapper function for general capital validation without specific strategy.
+    
+    Returns:
+        Dict with general capital validation results
+    """
+    try:
+        # Call validate_trading_capital without strategy legs for general validation
+        return validate_trading_capital(strategy_legs=None, risk_percentage=5.0)
+        
+    except Exception as e:
+        return {
+            'status': 'ERROR',
+            'message': f'General capital validation failed: {str(e)}',
+            'validation_passed': False
+        }
+
+
+def validate_trading_capital(strategy_legs=None, risk_percentage=5.0):
+    """
+    Validate if sufficient capital is available for a trading strategy.
+    
+    IMPORTANT: This function includes intraday_payin amounts in the available cash calculation
+    since these funds are available for trading today even though they may not reflect in
+    available_cash until tomorrow.
+    
+    Args:
+        strategy_legs: List of strategy legs with order details (can be None for general validation)
+        risk_percentage: Maximum percentage of capital to risk (default 5%)
+    
+    Returns:
+        Validation result with detailed capital analysis including intraday_payin consideration
+    """
+    # Handle case where strategy_legs is not provided
+    if strategy_legs is None:
+        strategy_legs = []
+    try:
+        # Get current account margins
+        margins_result = get_account_margins()
+        if margins_result.get('status') != 'SUCCESS':
+            return {
+                'status': 'ERROR',
+                'message': 'Could not fetch account margins',
+                'validation_passed': False
+            }
+        
+        available_cash = margins_result['equity']['available_cash']
+        live_balance = margins_result['equity']['live_balance']
+        intraday_payin = margins_result['equity'].get('intraday_payin', 0)
+        
+        # Add intraday_payin to available cash since it's available for trading today
+        # even though it might not reflect in available_cash until tomorrow
+        total_available_cash = available_cash + intraday_payin
+        
+        # Calculate strategy margin requirement
+        if strategy_legs:
+            margin_result = calculate_strategy_margins(strategy_legs)
+            if margin_result.get('status') != 'SUCCESS':
+                # Fallback: estimate margin as 20% of option premium for simple strategies
+                estimated_margin = 0
+                for leg in strategy_legs:
+                    if 'price' in leg and 'quantity' in leg:
+                        estimated_margin += leg['price'] * leg['quantity'] * 0.20
+                
+                margin_result = {
+                    'status': 'SUCCESS',
+                    'total_margin_required': estimated_margin,
+                    'note': 'Estimated margin calculation used'
+                }
+            
+            required_margin = margin_result['total_margin_required']
+            
+            # Calculate premium costs for debit strategies
+            total_premium_cost = 0
+            for leg in strategy_legs:
+                if leg['action'] == 'BUY' and 'price' in leg:
+                    total_premium_cost += leg['price'] * leg['quantity']
+        else:
+            # General capital validation without specific strategy
+            required_margin = 0
+            total_premium_cost = 0
+            margin_result = {
+                'status': 'SUCCESS',
+                'total_margin_required': 0,
+                'note': 'General capital validation - no specific strategy'
+            }
+        
+        # Calculate total capital requirement
+        safety_buffer = required_margin * 0.20  # 20% safety buffer
+        total_requirement = required_margin + safety_buffer + total_premium_cost
+        
+        # Risk validation
+        max_risk_amount = live_balance * (risk_percentage / 100)
+        risk_amount = max(total_premium_cost, required_margin * 0.5)  # Estimate potential loss
+        
+        # Validation checks
+        validations = {
+            'sufficient_cash': total_available_cash >= total_requirement,
+            'within_risk_limit': risk_amount <= max_risk_amount,
+            'reasonable_margin_usage': required_margin <= (total_available_cash * 0.8),
+            'emergency_buffer': (total_available_cash - total_requirement) >= (live_balance * 0.1)
+        }
+        
+        validation_passed = all(validations.values())
+        
+        # Generate warnings and recommendations
+        warnings = []
+        if not validations['sufficient_cash']:
+            warnings.append(f"Insufficient cash: Need ₹{total_requirement:.2f}, have ₹{total_available_cash:.2f} (₹{available_cash:.2f} + ₹{intraday_payin:.2f} intraday_payin)")
+        if not validations['within_risk_limit']:
+            warnings.append(f"Exceeds risk limit: Risk ₹{risk_amount:.2f} > Limit ₹{max_risk_amount:.2f}")
+        if not validations['reasonable_margin_usage']:
+            warnings.append(f"High margin usage: ₹{required_margin:.2f} > 80% of total available cash")
+        if not validations['emergency_buffer']:
+            warnings.append("Insufficient emergency buffer after trade")
+        
+        return {
+            'status': 'SUCCESS',
+            'validation_passed': validation_passed,
+            'capital_analysis': {
+                'available_cash': available_cash,
+                'intraday_payin': intraday_payin,
+                'total_available_cash': total_available_cash,
+                'live_balance': live_balance,
+                'required_margin': required_margin,
+                'premium_cost': total_premium_cost,
+                'safety_buffer': safety_buffer,
+                'total_requirement': total_requirement,
+                'remaining_cash': total_available_cash - total_requirement,
+                'risk_amount': risk_amount,
+                'max_risk_allowed': max_risk_amount,
+                'margin_utilization_pct': (required_margin / total_available_cash) * 100 if total_available_cash > 0 else 0
+            },
+            'validation_checks': validations,
+            'warnings': warnings,
+            'recommendations': [
+                'Maintain at least 10% emergency cash buffer',
+                'Keep margin utilization below 80% of total available cash (including intraday_payin)',
+                f'Risk per trade should not exceed {risk_percentage}% of total capital',
+                'Consider paper trading if capital is very limited',
+                'Intraday_payin amounts are included in available cash for trading today'
+            ],
+            'margin_calculation_note': margin_result.get('note', 'Exact margin calculation used'),
+            'validation_type': 'strategy_specific' if strategy_legs else 'general_capital'
+        }
+        
+    except Exception as e:
+        return {
+            'status': 'ERROR',
+            'message': f'Capital validation failed: {str(e)}',
+            'validation_passed': False
+        }
+
+
+def analyze_position_conflicts_wrapper(proposed_strategy: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """
+    Wrapper function for position conflict analysis that automatically fetches current positions.
+    
+    Args:
+        proposed_strategy: Dictionary containing proposed strategy details (optional)
+    
+    Returns:
+        Conflict analysis with recommendations for position management
+    """
+    try:
+        # Get current portfolio positions
+        positions_result = get_portfolio_positions()
+        if positions_result.get('status') != 'SUCCESS':
+            return {
+                'status': 'ERROR',
+                'message': f'Failed to fetch current positions: {positions_result.get("message", "Unknown error")}',
+                'conflicts_found': True,  # Assume conflict if we can't check
+                'recommendation': 'Manual review required'
+            }
+        
+        existing_positions = positions_result.get('positions', [])
+        
+        # If no proposed strategy provided, just analyze current positions
+        if not proposed_strategy:
+            return {
+                'status': 'SUCCESS',
+                'conflicts_found': False,
+                'message': 'No proposed strategy provided - analyzing current positions only',
+                'current_position_count': len(existing_positions),
+                'analysis': {
+                    'current_positions': existing_positions,
+                    'recommendations': [
+                        'Current positions analyzed successfully',
+                        'No conflicts to check without proposed strategy'
+                    ]
+                },
+                'recommendation': 'Current positions are manageable'
+            }
+        
+        # Call the main conflict analysis function
+        return analyze_position_conflicts(existing_positions, proposed_strategy)
+        
+    except Exception as e:
+        return {
+            'status': 'ERROR',
+            'message': f'Position conflict analysis wrapper failed: {str(e)}',
+            'conflicts_found': True,  # Assume conflict if analysis fails
+            'recommendation': 'Manual review required'
+        }
+
+
+def analyze_position_conflicts(existing_positions, proposed_strategy):
+    """
+    Analyze potential conflicts between existing positions and a proposed new strategy.
+    
+    Args:
+        existing_positions: List of current portfolio positions
+        proposed_strategy: Dictionary containing proposed strategy details
+    
+    Returns:
+        Conflict analysis with recommendations for position management
+    """
+    try:
+        conflicts = {
+            'directional_conflicts': [],
+            'volatility_conflicts': [],
+            'expiry_conflicts': [],
+            'strike_conflicts': [],
+            'risk_concentration': [],
+            'recommendations': []
+        }
+        
+        if not existing_positions or len(existing_positions) == 0:
+            return {
+                'status': 'SUCCESS',
+                'conflicts_found': False,
+                'message': 'No existing positions - clean slate for new trade',
+                'analysis': conflicts
+            }
+        
+        # Analyze each existing position against proposed strategy
+        for position in existing_positions:
+            # Directional conflict analysis
+            if 'direction' in position and 'direction' in proposed_strategy:
+                if position['direction'] != proposed_strategy['direction']:
+                    conflicts['directional_conflicts'].append({
+                        'position': position,
+                        'conflict_type': 'opposite_direction',
+                        'risk_level': 'high'
+                    })
+            
+            # Expiry conflict analysis
+            if 'expiry' in position and 'expiry' in proposed_strategy:
+                if position['expiry'] == proposed_strategy['expiry']:
+                    conflicts['expiry_conflicts'].append({
+                        'position': position,
+                        'conflict_type': 'same_expiry',
+                        'risk_level': 'medium'
+                    })
+            
+            # Strike conflict analysis
+            if 'strike' in position and 'strike' in proposed_strategy:
+                strike_diff = abs(position['strike'] - proposed_strategy['strike'])
+                if strike_diff < 100:  # Close strikes create gamma risk
+                    conflicts['strike_conflicts'].append({
+                        'position': position,
+                        'conflict_type': 'close_strikes',
+                        'risk_level': 'medium',
+                        'strike_distance': strike_diff
+                    })
+        
+        # Risk concentration analysis
+        total_positions = len(existing_positions) + 1  # Including proposed
+        if total_positions > 3:
+            conflicts['risk_concentration'].append({
+                'issue': 'too_many_positions',
+                'current_count': len(existing_positions),
+                'proposed_count': total_positions,
+                'risk_level': 'high'
+            })
+        
+        # Generate recommendations
+        if conflicts['directional_conflicts']:
+            conflicts['recommendations'].append({
+                'action': 'close_opposite_positions',
+                'priority': 'high',
+                'reason': 'Directional conflicts create hedging inefficiency'
+            })
+        
+        if conflicts['expiry_conflicts']:
+            conflicts['recommendations'].append({
+                'action': 'consider_different_expiry',
+                'priority': 'medium',
+                'reason': 'Same expiry creates concentration risk'
+            })
+        
+        if conflicts['strike_conflicts']:
+            conflicts['recommendations'].append({
+                'action': 'avoid_close_strikes',
+                'priority': 'medium',
+                'reason': 'Close strikes create excessive gamma risk'
+            })
+        
+        if conflicts['risk_concentration']:
+            conflicts['recommendations'].append({
+                'action': 'manage_existing_positions',
+                'priority': 'high',
+                'reason': 'Too many positions create management complexity'
+            })
+        
+        conflicts_found = any([
+            conflicts['directional_conflicts'],
+            conflicts['volatility_conflicts'],
+            conflicts['expiry_conflicts'],
+            conflicts['strike_conflicts'],
+            conflicts['risk_concentration']
+        ])
+        
+        return {
+            'status': 'SUCCESS',
+            'conflicts_found': conflicts_found,
+            'total_conflicts': sum(len(conflicts[key]) for key in conflicts if key != 'recommendations'),
+            'analysis': conflicts,
+            'recommendation': 'Proceed with caution' if conflicts_found else 'No conflicts detected'
+        }
+        
+    except Exception as e:
+        return {
+            'status': 'ERROR',
+            'message': f'Position conflict analysis failed: {str(e)}',
+            'conflicts_found': True,  # Assume conflict if analysis fails
+            'recommendation': 'Manual review required'
+        }
+
+
+def calculate_realistic_pricing(strike_price, option_type, expiry, transaction_type, current_bid, current_ask, market_volatility="normal"):
+    """
+    Calculate realistic execution prices accounting for bid-ask spreads and slippage.
+    
+    Args:
+        strike_price: Option strike price
+        option_type: 'CE' or 'PE'
+        expiry: Expiry date
+        transaction_type: 'buy' or 'sell'
+        current_bid: Current bid price
+        current_ask: Current ask price
+        market_volatility: 'low', 'normal', 'high' for buffer adjustment
+    
+    Returns:
+        Recommended order price with buffer, spread analysis, and execution probability
+    """
+    try:
+        bid = float(current_bid)
+        ask = float(current_ask)
+        mid_price = (bid + ask) / 2
+        spread_pct = ((ask - bid) / mid_price) * 100 if mid_price > 0 else 0
+        
+        # Determine buffer based on market conditions
+        if market_volatility == "high":
+            buffer_pct = 5
+            buffer_absolute = max(0.25, mid_price * 0.05)
+        elif market_volatility == "low":
+            buffer_pct = 2
+            buffer_absolute = max(0.05, mid_price * 0.02)
+        else:  # normal
+            buffer_pct = 3
+            buffer_absolute = max(0.10, mid_price * 0.03)
+        
+        if transaction_type.lower() == "buy":
+            recommended_price = ask + buffer_absolute
+            execution_probability = "High" if spread_pct < 5 else "Medium" if spread_pct < 10 else "Low"
+        else:  # sell
+            recommended_price = bid - buffer_absolute
+            execution_probability = "High" if spread_pct < 5 else "Medium" if spread_pct < 10 else "Low"
+        
+        # Round to nearest 0.05 (NSE tick size)
+        recommended_price = round(recommended_price * 20) / 20
+        
+        analysis = {
+            "recommended_price": recommended_price,
+            "current_bid": bid,
+            "current_ask": ask,
+            "spread_percentage": round(spread_pct, 2),
+            "buffer_applied": round(buffer_absolute, 2),
+            "execution_probability": execution_probability,
+            "warning": "Reject trade" if spread_pct > 8 else "Proceed with caution" if spread_pct > 5 else "Good liquidity"
+        }
+        
+        return analysis
+        
+    except Exception as e:
+        return {"error": f"Pricing calculation failed: {str(e)}"}
+
+
 # Execution and Portfolio Tools Registry
 EXECUTION_PORTFOLIO_TOOLS = {
     'execute_options_strategy': execute_options_strategy,
@@ -770,7 +1298,8 @@ EXECUTION_PORTFOLIO_TOOLS = {
     'get_orders_history': get_orders_history,
     'get_daily_trading_summary': get_daily_trading_summary,
     'export_trading_data': export_trading_data,
-    'get_risk_metrics': get_risk_metrics
+    'get_risk_metrics': get_risk_metrics,
+    'execute_and_store_strategy': execute_and_store_strategy
 }
 
 
@@ -824,17 +1353,54 @@ def get_all_nifty_tools() -> Dict[str, Any]:
 if __name__ == "__main__":
     from dotenv import load_dotenv
     import os
-    load_dotenv(dotenv_path='./.env')
+    
+    # Try multiple possible paths for .env file
+    env_paths = [
+        './.env',  # Current directory
+        '../.env',  # Relative to agent_tools
+        '../../.env',  # Relative to core_tools
+        './.env'  # Alternative relative path
+    ]
+    
+    env_loaded = False
+    for env_path in env_paths:
+        try:
+            load_dotenv(dotenv_path=env_path)
+            print(f"✅ Successfully loaded .env from: {env_path}")
+            env_loaded = True
+            break
+        except Exception:
+            continue
+            
+    if not env_loaded:
+        print("❌ Could not find .env file in any expected location")
+    
     # Load API credentials and access token from environment or files
     api_key = os.getenv("kite_api_key")
     api_secret = os.getenv("kite_api_secret")
+    
+    # Try multiple possible paths for access token
+    access_token_paths = [
+        "access_token.txt",  # Current directory
+        "../data/access_token.txt",  # Relative to agent_tools
+        "../../data/access_token.txt",  # Relative to core_tools
+        "./data/access_token.txt"  # Alternative relative path
+    ]
+    
     access_token = None
-    # Try to read access_token.txt if present
-    try:
-        with open("access_token.txt", "r") as f:
-            access_token = f.read().strip()
-    except Exception:
-        print("access_token.txt not found. Set access token manually if needed.")
+    for path in access_token_paths:
+        if os.path.exists(path):
+            try:
+                with open(path, "r") as f:
+                    access_token = f.read().strip()
+                    print(f"✅ Successfully loaded access token from: {path}")
+                    break
+            except Exception as e:
+                print(f"❌ Error reading access token from {path}: {e}")
+                continue
+                
+    if access_token is None:
+        print("❌ Could not find access_token.txt in any expected location")
     
     # Initialize session
     if api_key and access_token:

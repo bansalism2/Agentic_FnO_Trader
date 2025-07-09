@@ -872,15 +872,834 @@ def analyze_strategy_greeks(strategy_legs: List[Dict[str, Any]], spot_price: flo
         }
 
 
+def comprehensive_advanced_analysis_wrapper() -> Dict[str, Any]:
+    """
+    Wrapper function for comprehensive advanced analysis that automatically fetches required data.
+    
+    Returns:
+        Dict with comprehensive analysis and integrated recommendations
+    """
+    try:
+        # Import required functions
+        from connect_data_tools import get_nifty_spot_price_safe, get_options_chain_safe, get_historical_volatility
+        
+        # Get current spot price
+        spot_result = get_nifty_spot_price_safe()
+        if spot_result.get('status') != 'SUCCESS':
+            return {
+                'status': 'ERROR',
+                'message': f'Failed to get spot price: {spot_result.get("message", "Unknown error")}'
+            }
+        
+        spot_price = spot_result.get('spot_price', 0)
+        if spot_price <= 0:
+            return {
+                'status': 'ERROR',
+                'message': 'Invalid spot price received'
+            }
+        
+        # Get options chain
+        options_result = get_options_chain_safe()
+        if options_result.get('status') != 'SUCCESS':
+            return {
+                'status': 'ERROR',
+                'message': f'Failed to get options chain: {options_result.get("message", "Unknown error")}'
+            }
+        
+        options_chain = options_result.get('options_chain', [])
+        if not options_chain:
+            return {
+                'status': 'ERROR',
+                'message': 'Empty options chain received'
+            }
+        
+        # Get technical indicators
+        from master_indicators import get_nifty_technical_analysis_tool
+        tech_result = get_nifty_technical_analysis_tool()
+        if 'error' in tech_result:
+            return {
+                'status': 'ERROR',
+                'message': f'Failed to get technical analysis: {tech_result.get("error", "Unknown error")}'
+            }
+        
+        technical_indicators = tech_result
+        
+        # Get historical volatility (optional)
+        hist_vol_result = get_historical_volatility(30)
+        historical_volatility = None
+        if hist_vol_result.get('status') == 'SUCCESS':
+            historical_volatility = hist_vol_result.get('volatility', {}).get('annualized', None)
+        
+        # Call the main comprehensive analysis function
+        return comprehensive_advanced_analysis(spot_price, options_chain, technical_indicators, historical_volatility)
+        
+    except Exception as e:
+        return {
+            'status': 'ERROR',
+            'message': f'Comprehensive advanced analysis wrapper failed: {str(e)}'
+        }
+
+
+def comprehensive_advanced_analysis(spot_price: float, 
+                                  options_chain: List[Dict[str, Any]],
+                                  technical_indicators: Dict[str, Any],
+                                  historical_volatility: float = None,
+                                  historical_iv_data: List[float] = None) -> Dict[str, Any]:
+    """
+    Comprehensive advanced analysis integrating all new logics:
+    - VIX Integration & Volatility Regime Detection
+    - IV Rank Analysis for Premium Buying vs Selling
+    - PCR + Technical Analysis for Entry Timing
+    - Market Regime Detection for Strategy Selection
+    
+    Args:
+        spot_price: Current NIFTY spot price
+        options_chain: Options chain data
+        technical_indicators: Technical analysis results
+        historical_volatility: Historical realized volatility (optional)
+        historical_iv_data: Historical IV data for percentile calculation (optional)
+    
+    Returns:
+        Dict with comprehensive analysis and integrated recommendations
+    """
+    try:
+        # Import required functions
+        from calculate_analysis_tools import (
+            analyze_vix_integration, calculate_iv_rank_analysis, detect_market_regime
+        )
+        from master_indicators import calculate_pcr_technical_analysis, analyze_pcr_extremes
+        
+        # 1. VIX Integration & Volatility Regime Detection
+        vix_analysis = analyze_vix_integration(spot_price, options_chain, historical_volatility)
+        
+        # 2. IV Rank Analysis
+        iv_analysis = calculate_iv_rank_analysis(options_chain, spot_price, historical_iv_data)
+        
+        # 3. PCR + Technical Analysis
+        pcr_analysis = calculate_pcr_technical_analysis(options_chain, technical_indicators, spot_price)
+        
+        # 4. PCR Extremes Analysis
+        pcr_extremes = analyze_pcr_extremes(options_chain, 30)
+        
+        # 5. Market Regime Detection
+        regime_analysis = detect_market_regime(technical_indicators, vix_analysis, options_chain)
+        
+        # 6. Integrated Analysis and Recommendations
+        integrated_score = 0
+        integrated_signals = []
+        
+        # Combine signals from all analyses
+        if vix_analysis.get('status') == 'SUCCESS':
+            vol_regime = vix_analysis.get('volatility_regime', 'NORMAL')
+            if vol_regime in ['HIGH_STRESS', 'ELEVATED']:
+                integrated_score += 2
+                integrated_signals.append(f"High volatility regime: {vol_regime}")
+            elif vol_regime == 'COMPRESSED':
+                integrated_score -= 1
+                integrated_signals.append("Low volatility regime - potential breakout")
+        
+        if iv_analysis.get('status') == 'SUCCESS':
+            iv_decision = iv_analysis.get('decision', 'NEUTRAL')
+            if iv_decision in ['SELL_PREMIUM', 'NEUTRAL_SELL']:
+                integrated_score += 1
+                integrated_signals.append(f"IV analysis: {iv_decision}")
+            elif iv_decision in ['BUY_PREMIUM', 'NEUTRAL_BUY']:
+                integrated_score -= 1
+                integrated_signals.append(f"IV analysis: {iv_decision}")
+        
+        if pcr_analysis.get('status') == 'SUCCESS':
+            entry_signal = pcr_analysis.get('entry_signal', 'NEUTRAL')
+            if entry_signal in ['STRONG_BUY', 'BUY']:
+                integrated_score += 2
+                integrated_signals.append(f"PCR + Technical: {entry_signal}")
+            elif entry_signal in ['STRONG_SELL', 'SELL']:
+                integrated_score -= 2
+                integrated_signals.append(f"PCR + Technical: {entry_signal}")
+        
+        if pcr_extremes.get('status') == 'SUCCESS':
+            contrarian_signal = pcr_extremes.get('contrarian_signal', 'NEUTRAL')
+            if contrarian_signal in ['STRONG_BUY', 'BUY']:
+                integrated_score += 3
+                integrated_signals.append(f"PCR Extremes: {contrarian_signal}")
+            elif contrarian_signal in ['STRONG_SELL', 'SELL']:
+                integrated_score -= 3
+                integrated_signals.append(f"PCR Extremes: {contrarian_signal}")
+        
+        if regime_analysis.get('status') == 'SUCCESS':
+            primary_regime = regime_analysis.get('primary_regime', 'RANGING')
+            integrated_signals.append(f"Market Regime: {primary_regime}")
+        
+        # Determine overall recommendation
+        if integrated_score >= 5:
+            overall_recommendation = "STRONG_BUY"
+            confidence = "Very High"
+            reasoning = "Multiple strong bullish signals across all analyses"
+        elif integrated_score >= 2:
+            overall_recommendation = "BUY"
+            confidence = "High"
+            reasoning = "Multiple bullish signals with good convergence"
+        elif integrated_score >= -1:
+            overall_recommendation = "NEUTRAL"
+            confidence = "Medium"
+            reasoning = "Mixed signals - wait for clearer confirmation"
+        elif integrated_score >= -4:
+            overall_recommendation = "SELL"
+            confidence = "High"
+            reasoning = "Multiple bearish signals with good convergence"
+        else:
+            overall_recommendation = "STRONG_SELL"
+            confidence = "Very High"
+            reasoning = "Multiple strong bearish signals across all analyses"
+        
+        # Strategy recommendations based on integrated analysis
+        strategy_recommendations = {
+            "STRONG_BUY": {
+                "primary_strategies": [
+                    "Long Calls (ATM or slightly OTM)",
+                    "Call Debit Spreads",
+                    "Bull Put Spreads",
+                    "Long Straddle (if volatility expected to increase)"
+                ],
+                "secondary_strategies": [
+                    "Iron Condor (bullish bias)",
+                    "Calendar Spreads (bullish bias)"
+                ],
+                "risk_level": "Moderate to Aggressive",
+                "position_sizing": "60-80% of available capital"
+            },
+            "BUY": {
+                "primary_strategies": [
+                    "Call Debit Spreads",
+                    "Bull Put Spreads",
+                    "Long Calls (with proper risk management)"
+                ],
+                "secondary_strategies": [
+                    "Iron Condor (slight bullish bias)",
+                    "Calendar Spreads"
+                ],
+                "risk_level": "Moderate",
+                "position_sizing": "40-60% of available capital"
+            },
+            "NEUTRAL": {
+                "primary_strategies": [
+                    "Iron Condor",
+                    "Calendar Spreads",
+                    "Butterfly Spreads"
+                ],
+                "secondary_strategies": [
+                    "Short Strangle (with wide wings)",
+                    "Ratio Spreads"
+                ],
+                "risk_level": "Conservative",
+                "position_sizing": "30-50% of available capital"
+            },
+            "SELL": {
+                "primary_strategies": [
+                    "Put Debit Spreads",
+                    "Bear Call Spreads",
+                    "Long Puts (with proper risk management)"
+                ],
+                "secondary_strategies": [
+                    "Iron Condor (slight bearish bias)",
+                    "Calendar Spreads"
+                ],
+                "risk_level": "Moderate",
+                "position_sizing": "40-60% of available capital"
+            },
+            "STRONG_SELL": {
+                "primary_strategies": [
+                    "Long Puts (ATM or slightly OTM)",
+                    "Put Debit Spreads",
+                    "Bear Call Spreads",
+                    "Long Straddle (if volatility expected to increase)"
+                ],
+                "secondary_strategies": [
+                    "Iron Condor (bearish bias)",
+                    "Calendar Spreads (bearish bias)"
+                ],
+                "risk_level": "Moderate to Aggressive",
+                "position_sizing": "60-80% of available capital"
+            }
+        }
+        
+        # Risk management guidelines
+        risk_guidelines = {
+            "STRONG_BUY": {
+                "stop_loss": "Below recent support levels or 15-20% of premium",
+                "profit_target": "100-200% of premium or key resistance levels",
+                "timeframe": "3-7 days for momentum trades",
+                "hedging": "Consider protective puts for large positions"
+            },
+            "BUY": {
+                "stop_loss": "Below entry price - 10-15% of premium",
+                "profit_target": "50-100% of premium",
+                "timeframe": "5-10 days",
+                "hedging": "Standard risk management"
+            },
+            "NEUTRAL": {
+                "stop_loss": "Standard 25-30% of premium received",
+                "profit_target": "50-70% of premium received",
+                "timeframe": "7-14 days",
+                "hedging": "Defined risk strategies preferred"
+            },
+            "SELL": {
+                "stop_loss": "Above entry price + 10-15% of premium",
+                "profit_target": "50-100% of premium",
+                "timeframe": "5-10 days",
+                "hedging": "Standard risk management"
+            },
+            "STRONG_SELL": {
+                "stop_loss": "Above recent resistance levels or 15-20% of premium",
+                "profit_target": "100-200% of premium or key support levels",
+                "timeframe": "3-7 days for momentum trades",
+                "hedging": "Consider protective calls for large positions"
+            }
+        }
+        
+        return {
+            'status': 'SUCCESS',
+            'overall_recommendation': overall_recommendation,
+            'confidence': confidence,
+            'reasoning': reasoning,
+            'integrated_score': integrated_score,
+            'integrated_signals': integrated_signals,
+            'strategy_recommendations': strategy_recommendations[overall_recommendation],
+            'risk_guidelines': risk_guidelines[overall_recommendation],
+            'detailed_analyses': {
+                'vix_analysis': vix_analysis,
+                'iv_analysis': iv_analysis,
+                'pcr_analysis': pcr_analysis,
+                'pcr_extremes': pcr_extremes,
+                'regime_analysis': regime_analysis
+            },
+            'key_metrics': {
+                'spot_price': spot_price,
+                'volatility_regime': vix_analysis.get('volatility_regime', 'NORMAL'),
+                'iv_percentile': iv_analysis.get('iv_percentile', 0.5),
+                'pcr': pcr_analysis.get('put_call_ratio', 1.0),
+                'market_regime': regime_analysis.get('primary_regime', 'RANGING'),
+                'entry_signal': pcr_analysis.get('entry_signal', 'NEUTRAL')
+            },
+            'timestamp': dt.datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        return {
+            'status': 'ERROR',
+            'message': f'Comprehensive analysis failed: {str(e)}'
+        }
+
+
+# ============================================================================
+# MISSING PREMIUM SELLING STRATEGIES
+# ============================================================================
+
+def create_bull_put_spread_strategy(expiry_date: str = None, expiry_type: str = 'weekly',
+                                   spread_width: int = 100, quantity: int = 25) -> Dict[str, Any]:
+    """
+    Create a Bull Put Spread (Credit Spread) strategy.
+    
+    Args:
+        expiry_date: Specific expiry (YYYY-MM-DD) or None for auto-selection
+        expiry_type: 'weekly' or 'monthly' if expiry_date is None
+        spread_width: Width between strikes (typically 50, 100, 200)
+        quantity: Number of lots
+    
+    Returns:
+        Dict with strategy details and execution plan
+    """
+    try:
+        # Get expiry and spot price
+        if not expiry_date:
+            expiry_result = get_nifty_expiry_dates(expiry_type)
+            if expiry_result['status'] != 'SUCCESS' or not expiry_result['expiries']:
+                return {'status': 'ERROR', 'message': 'No expiry dates available'}
+            expiry_date = expiry_result['expiries'][0]
+        
+        spot_result = get_nifty_spot_price()
+        if spot_result['status'] != 'SUCCESS':
+            return spot_result
+        
+        spot_price = spot_result['spot_price']
+        
+        # Get options chain
+        chain_result = get_options_chain(expiry_date, expiry_type, strike_range=8)
+        if chain_result['status'] != 'SUCCESS':
+            return chain_result
+        
+        # Calculate Bull Put Spread strikes
+        atm_strike = chain_result['atm_strike']
+        sell_strike = atm_strike - 50  # Sell OTM put
+        buy_strike = sell_strike - spread_width  # Buy further OTM put
+        
+        chain_data = chain_result['options_chain']
+        
+        # Find required options
+        sell_row = next((r for r in chain_data if r['strike'] == sell_strike), None)
+        buy_row = next((r for r in chain_data if r['strike'] == buy_strike), None)
+        
+        if not sell_row or not buy_row:
+            return {'status': 'ERROR', 'message': 'Required strikes not found in chain'}
+        
+        sell_price = sell_row.get('PE_ltp', 0)
+        buy_price = buy_row.get('PE_ltp', 0)
+        
+        if sell_price <= 0 or buy_price <= 0:
+            return {'status': 'ERROR', 'message': 'Invalid option prices'}
+        
+        # Calculate strategy metrics
+        net_premium = (sell_price - buy_price) * quantity
+        max_profit = net_premium
+        max_loss = (spread_width - (sell_price - buy_price)) * quantity
+        breakeven = sell_strike - (sell_price - buy_price)
+        
+        # Create strategy legs
+        legs = [
+            {
+                'symbol': sell_row['PE_symbol'],
+                'action': 'SELL',
+                'quantity': quantity,
+                'strike': sell_strike,
+                'option_type': 'PE',
+                'price': sell_price,
+                'exchange': 'NFO'
+            },
+            {
+                'symbol': buy_row['PE_symbol'],
+                'action': 'BUY',
+                'quantity': quantity,
+                'strike': buy_strike,
+                'option_type': 'PE',
+                'price': buy_price,
+                'exchange': 'NFO'
+            }
+        ]
+        
+        return {
+            'status': 'SUCCESS',
+            'strategy_name': f'Bull Put Spread ({expiry_type.title()})',
+            'expiry_date': expiry_date,
+            'spot_price': spot_price,
+            'atm_strike': atm_strike,
+            'legs': legs,
+            'strategy_metrics': {
+                'net_premium_received': round(net_premium, 2),
+                'max_profit': round(max_profit, 2),
+                'max_loss': round(max_loss, 2),
+                'breakeven_point': round(breakeven, 2),
+                'spread_width': spread_width,
+                'risk_reward_ratio': round(max_profit / max_loss, 2) if max_loss > 0 else 'N/A'
+            },
+            'market_outlook': 'Bullish - expecting upward movement or sideways with bullish bias',
+            'timestamp': dt.datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        return {
+            'status': 'ERROR',
+            'message': f'Bull Put Spread strategy creation failed: {str(e)}'
+        }
+
+
+def create_bear_call_spread_strategy(expiry_date: str = None, expiry_type: str = 'weekly',
+                                    spread_width: int = 100, quantity: int = 25) -> Dict[str, Any]:
+    """
+    Create a Bear Call Spread (Credit Spread) strategy.
+    
+    Args:
+        expiry_date: Specific expiry (YYYY-MM-DD) or None for auto-selection
+        expiry_type: 'weekly' or 'monthly' if expiry_date is None
+        spread_width: Width between strikes (typically 50, 100, 200)
+        quantity: Number of lots
+    
+    Returns:
+        Dict with strategy details and execution plan
+    """
+    try:
+        # Get expiry and spot price
+        if not expiry_date:
+            expiry_result = get_nifty_expiry_dates(expiry_type)
+            if expiry_result['status'] != 'SUCCESS' or not expiry_result['expiries']:
+                return {'status': 'ERROR', 'message': 'No expiry dates available'}
+            expiry_date = expiry_result['expiries'][0]
+        
+        spot_result = get_nifty_spot_price()
+        if spot_result['status'] != 'SUCCESS':
+            return spot_result
+        
+        spot_price = spot_result['spot_price']
+        
+        # Get options chain
+        chain_result = get_options_chain(expiry_date, expiry_type, strike_range=8)
+        if chain_result['status'] != 'SUCCESS':
+            return chain_result
+        
+        # Calculate Bear Call Spread strikes
+        atm_strike = chain_result['atm_strike']
+        sell_strike = atm_strike + 50  # Sell OTM call
+        buy_strike = sell_strike + spread_width  # Buy further OTM call
+        
+        chain_data = chain_result['options_chain']
+        
+        # Find required options
+        sell_row = next((r for r in chain_data if r['strike'] == sell_strike), None)
+        buy_row = next((r for r in chain_data if r['strike'] == buy_strike), None)
+        
+        if not sell_row or not buy_row:
+            return {'status': 'ERROR', 'message': 'Required strikes not found in chain'}
+        
+        sell_price = sell_row.get('CE_ltp', 0)
+        buy_price = buy_row.get('CE_ltp', 0)
+        
+        if sell_price <= 0 or buy_price <= 0:
+            return {'status': 'ERROR', 'message': 'Invalid option prices'}
+        
+        # Calculate strategy metrics
+        net_premium = (sell_price - buy_price) * quantity
+        max_profit = net_premium
+        max_loss = (spread_width - (sell_price - buy_price)) * quantity
+        breakeven = sell_strike + (sell_price - buy_price)
+        
+        # Create strategy legs
+        legs = [
+            {
+                'symbol': sell_row['CE_symbol'],
+                'action': 'SELL',
+                'quantity': quantity,
+                'strike': sell_strike,
+                'option_type': 'CE',
+                'price': sell_price,
+                'exchange': 'NFO'
+            },
+            {
+                'symbol': buy_row['CE_symbol'],
+                'action': 'BUY',
+                'quantity': quantity,
+                'strike': buy_strike,
+                'option_type': 'CE',
+                'price': buy_price,
+                'exchange': 'NFO'
+            }
+        ]
+        
+        return {
+            'status': 'SUCCESS',
+            'strategy_name': f'Bear Call Spread ({expiry_type.title()})',
+            'expiry_date': expiry_date,
+            'spot_price': spot_price,
+            'atm_strike': atm_strike,
+            'legs': legs,
+            'strategy_metrics': {
+                'net_premium_received': round(net_premium, 2),
+                'max_profit': round(max_profit, 2),
+                'max_loss': round(max_loss, 2),
+                'breakeven_point': round(breakeven, 2),
+                'spread_width': spread_width,
+                'risk_reward_ratio': round(max_profit / max_loss, 2) if max_loss > 0 else 'N/A'
+            },
+            'market_outlook': 'Bearish - expecting downward movement or sideways with bearish bias',
+            'timestamp': dt.datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        return {
+            'status': 'ERROR',
+            'message': f'Bear Call Spread strategy creation failed: {str(e)}'
+        }
+
+
+def create_calendar_spread_strategy(expiry_date: str = None, option_type: str = 'CE',
+                                   strike_distance: int = 0, quantity: int = 25) -> Dict[str, Any]:
+    """
+    Create a Calendar Spread (Time Spread) strategy.
+    
+    Args:
+        expiry_date: Specific expiry (YYYY-MM-DD) or None for auto-selection
+        option_type: 'CE' or 'PE'
+        strike_distance: Distance from ATM (0 = ATM, positive = OTM, negative = ITM)
+        quantity: Number of lots
+    
+    Returns:
+        Dict with strategy details and execution plan
+    """
+    try:
+        # Get spot price
+        spot_result = get_nifty_spot_price()
+        if spot_result['status'] != 'SUCCESS':
+            return spot_result
+        
+        spot_price = spot_result['spot_price']
+        
+        # Get weekly and monthly expiries
+        weekly_result = get_nifty_expiry_dates('weekly')
+        monthly_result = get_nifty_expiry_dates('monthly')
+        
+        if (weekly_result['status'] != 'SUCCESS' or not weekly_result['expiries'] or
+            monthly_result['status'] != 'SUCCESS' or not monthly_result['expiries']):
+            return {'status': 'ERROR', 'message': 'No expiry dates available'}
+        
+        short_expiry = weekly_result['expiries'][0]
+        long_expiry = monthly_result['expiries'][0]
+        
+        # Get options chains for both expiries
+        short_chain_result = get_options_chain(short_expiry, 'weekly', strike_range=5)
+        long_chain_result = get_options_chain(long_expiry, 'monthly', strike_range=5)
+        
+        if short_chain_result['status'] != 'SUCCESS' or long_chain_result['status'] != 'SUCCESS':
+            return {'status': 'ERROR', 'message': 'Could not fetch options chains'}
+        
+        # Calculate target strike
+        atm_strike = short_chain_result['atm_strike']
+        target_strike = atm_strike + strike_distance
+        
+        # Find options in both chains
+        short_row = next((r for r in short_chain_result['options_chain'] if r['strike'] == target_strike), None)
+        long_row = next((r for r in long_chain_result['options_chain'] if r['strike'] == target_strike), None)
+        
+        if not short_row or not long_row:
+            return {'status': 'ERROR', 'message': 'Required strikes not found in chains'}
+        
+        short_price = short_row.get(f'{option_type}_ltp', 0)
+        long_price = long_row.get(f'{option_type}_ltp', 0)
+        
+        if short_price <= 0 or long_price <= 0:
+            return {'status': 'ERROR', 'message': 'Invalid option prices'}
+        
+        # Calculate strategy metrics
+        net_debit = (long_price - short_price) * quantity
+        max_profit = 'Unlimited (depends on time decay and movement)'
+        max_loss = net_debit
+        
+        # Create strategy legs
+        legs = [
+            {
+                'symbol': short_row[f'{option_type}_symbol'],
+                'action': 'SELL',
+                'quantity': quantity,
+                'strike': target_strike,
+                'option_type': option_type,
+                'price': short_price,
+                'exchange': 'NFO',
+                'expiry': short_expiry
+            },
+            {
+                'symbol': long_row[f'{option_type}_symbol'],
+                'action': 'BUY',
+                'quantity': quantity,
+                'strike': target_strike,
+                'option_type': option_type,
+                'price': long_price,
+                'exchange': 'NFO',
+                'expiry': long_expiry
+            }
+        ]
+        
+        return {
+            'status': 'SUCCESS',
+            'strategy_name': f'{option_type} Calendar Spread',
+            'short_expiry': short_expiry,
+            'long_expiry': long_expiry,
+            'spot_price': spot_price,
+            'atm_strike': atm_strike,
+            'target_strike': target_strike,
+            'legs': legs,
+            'strategy_metrics': {
+                'net_debit': round(net_debit, 2),
+                'max_profit': max_profit,
+                'max_loss': round(max_loss, 2),
+                'time_decay_advantage': 'Profits from faster decay of short option',
+                'strike_distance': strike_distance
+            },
+            'market_outlook': f'Neutral - benefits from time decay and {option_type} movement',
+            'timestamp': dt.datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        return {
+            'status': 'ERROR',
+            'message': f'Calendar Spread strategy creation failed: {str(e)}'
+        }
+
+
+
+
+
+# ============================================================================
+# CREWAI-COMPATIBLE WRAPPER FUNCTIONS
+# ============================================================================
+
+def create_long_straddle_wrapper(expiry_date: str = None, expiry_type: str = 'weekly',
+                                quantity: int = 25) -> Dict[str, Any]:
+    """
+    CrewAI-compatible wrapper for Long Straddle strategy creation.
+    
+    Args:
+        expiry_date: Specific expiry (YYYY-MM-DD) or None for auto-selection
+        expiry_type: 'weekly' or 'monthly' if expiry_date is None
+        quantity: Number of lots (multiples of 25)
+    
+    Returns:
+        Dict with strategy details and execution plan
+    """
+    # Handle None/null values properly
+    if expiry_date is None or expiry_date == "null" or expiry_date == "":
+        expiry_date = None
+    
+    return create_long_straddle_strategy(expiry_date, expiry_type, quantity)
+
+
+def create_short_strangle_wrapper(expiry_date: str = None, expiry_type: str = 'weekly',
+                                 otm_distance: int = 100, quantity: int = 25) -> Dict[str, Any]:
+    """
+    CrewAI-compatible wrapper for Short Strangle strategy creation.
+    
+    Args:
+        expiry_date: Specific expiry (YYYY-MM-DD) or None for auto-selection
+        expiry_type: 'weekly' or 'monthly' if expiry_date is None
+        otm_distance: Distance from ATM for OTM options
+        quantity: Number of lots
+    
+    Returns:
+        Dict with strategy details and execution plan
+    """
+    # Handle None/null values properly
+    if expiry_date is None or expiry_date == "null" or expiry_date == "":
+        expiry_date = None
+    
+    return create_short_strangle_strategy(expiry_date, expiry_type, otm_distance, quantity)
+
+
+def create_iron_condor_wrapper(expiry_date: str = None, expiry_type: str = 'weekly',
+                              wing_width: int = 100, quantity: int = 25) -> Dict[str, Any]:
+    """
+    CrewAI-compatible wrapper for Iron Condor strategy creation.
+    
+    Args:
+        expiry_date: Specific expiry (YYYY-MM-DD) or None for auto-selection
+        expiry_type: 'weekly' or 'monthly' if expiry_date is None
+        wing_width: Width between strikes
+        quantity: Number of lots
+    
+    Returns:
+        Dict with strategy details and execution plan
+    """
+    # Handle None/null values properly
+    if expiry_date is None or expiry_date == "null" or expiry_date == "":
+        expiry_date = None
+    
+    return create_iron_condor_strategy(expiry_date, expiry_type, wing_width, quantity)
+
+
+def create_butterfly_spread_wrapper(expiry_date: str = None, expiry_type: str = 'weekly',
+                                   option_type: str = 'CE', wing_width: int = 100,
+                                   quantity: int = 25) -> Dict[str, Any]:
+    """
+    CrewAI-compatible wrapper for Butterfly Spread strategy creation.
+    
+    Args:
+        expiry_date: Specific expiry (YYYY-MM-DD) or None for auto-selection
+        expiry_type: 'weekly' or 'monthly' if expiry_date is None
+        option_type: 'CE' or 'PE' for call or put butterfly
+        wing_width: Distance between strikes
+        quantity: Number of lots
+    
+    Returns:
+        Dict with strategy details and execution plan
+    """
+    # Handle None/null values properly
+    if expiry_date is None or expiry_date == "null" or expiry_date == "":
+        expiry_date = None
+    
+    return create_butterfly_spread_strategy(expiry_date, expiry_type, option_type, wing_width, quantity)
+
+
+def create_bull_put_spread_wrapper(expiry_date: str = None, expiry_type: str = 'weekly',
+                                  spread_width: int = 100, quantity: int = 25) -> Dict[str, Any]:
+    """
+    CrewAI-compatible wrapper for Bull Put Spread strategy creation.
+    
+    Args:
+        expiry_date: Specific expiry (YYYY-MM-DD) or None for auto-selection
+        expiry_type: 'weekly' or 'monthly' if expiry_date is None
+        spread_width: Width between strikes (typically 50, 100, 200)
+        quantity: Number of lots
+    
+    Returns:
+        Dict with strategy details and execution plan
+    """
+    # Handle None/null values properly
+    if expiry_date is None or expiry_date == "null" or expiry_date == "":
+        expiry_date = None
+    
+    return create_bull_put_spread_strategy(expiry_date, expiry_type, spread_width, quantity)
+
+
+def create_bear_call_spread_wrapper(expiry_date: str = None, expiry_type: str = 'weekly',
+                                   spread_width: int = 100, quantity: int = 25) -> Dict[str, Any]:
+    """
+    CrewAI-compatible wrapper for Bear Call Spread strategy creation.
+    
+    Args:
+        expiry_date: Specific expiry (YYYY-MM-DD) or None for auto-selection
+        expiry_type: 'weekly' or 'monthly' if expiry_date is None
+        spread_width: Width between strikes (typically 50, 100, 200)
+        quantity: Number of lots
+    
+    Returns:
+        Dict with strategy details and execution plan
+    """
+    # Handle None/null values properly
+    if expiry_date is None or expiry_date == "null" or expiry_date == "":
+        expiry_date = None
+    
+    return create_bear_call_spread_strategy(expiry_date, expiry_type, spread_width, quantity)
+
+
+def create_calendar_spread_wrapper(expiry_date: str = None, option_type: str = 'CE',
+                                  strike_distance: int = 0, quantity: int = 25) -> Dict[str, Any]:
+    """
+    CrewAI-compatible wrapper for Calendar Spread strategy creation.
+    
+    Args:
+        expiry_date: Specific expiry (YYYY-MM-DD) or None for auto-selection
+        option_type: 'CE' or 'PE'
+        strike_distance: Distance from ATM (0 = ATM, positive = OTM, negative = ITM)
+        quantity: Number of lots
+    
+    Returns:
+        Dict with strategy details and execution plan
+    """
+    # Handle None/null values properly
+    if expiry_date is None or expiry_date == "null" or expiry_date == "":
+        expiry_date = None
+    
+    return create_calendar_spread_strategy(expiry_date, option_type, strike_distance, quantity)
+
+
 # Strategy Creation Tools Registry
 STRATEGY_CREATION_TOOLS = {
+    # Core Strategy Functions
     'create_long_straddle_strategy': create_long_straddle_strategy,
     'create_short_strangle_strategy': create_short_strangle_strategy,
     'create_iron_condor_strategy': create_iron_condor_strategy,
     'create_butterfly_spread_strategy': create_butterfly_spread_strategy,
     'create_ratio_spread_strategy': create_ratio_spread_strategy,
+    # NEW PREMIUM SELLING STRATEGIES
+    'create_bull_put_spread_strategy': create_bull_put_spread_strategy,
+    'create_bear_call_spread_strategy': create_bear_call_spread_strategy,
+    'create_calendar_spread_strategy': create_calendar_spread_strategy,
+    # Analysis Functions
     'recommend_options_strategy': recommend_options_strategy,
-    'analyze_strategy_greeks': analyze_strategy_greeks
+    'analyze_strategy_greeks': analyze_strategy_greeks,
+    'comprehensive_advanced_analysis': comprehensive_advanced_analysis_wrapper,
+    # CrewAI-Compatible Wrapper Functions
+    'create_long_straddle_wrapper': create_long_straddle_wrapper,
+    'create_short_strangle_wrapper': create_short_strangle_wrapper,
+    'create_iron_condor_wrapper': create_iron_condor_wrapper,
+    'create_butterfly_spread_wrapper': create_butterfly_spread_wrapper,
+    'create_bull_put_spread_wrapper': create_bull_put_spread_wrapper,
+    'create_bear_call_spread_wrapper': create_bear_call_spread_wrapper,
+    'create_calendar_spread_wrapper': create_calendar_spread_wrapper,
 }
 
 
@@ -909,14 +1728,52 @@ if __name__ == "__main__":
     print("\n✅ Strategy Creation Tools loaded!")
     print("Note: Full testing requires active market connection")
 
-    # Load environment variables
-    load_dotenv(dotenv_path='./.env')
+    # Load environment variables - try multiple paths
+    env_paths = [
+        './.env',  # Current directory
+        '../.env',  # Relative to agent_tools
+        '../../.env',  # Relative to core_tools
+        './.env'  # Alternative relative path
+    ]
+    
+    env_loaded = False
+    for env_path in env_paths:
+        try:
+            load_dotenv(dotenv_path=env_path)
+            print(f"✅ Successfully loaded .env from: {env_path}")
+            env_loaded = True
+            break
+        except Exception:
+            continue
+            
+    if not env_loaded:
+        print("❌ Could not find .env file in any expected location")
+    
     api_key = os.getenv("kite_api_key")
     api_secret = os.getenv("kite_api_secret")
+    
+    # Try multiple possible paths for access token
+    access_token_paths = [
+        "access_token.txt",  # Current directory
+        "../data/access_token.txt",  # Relative to agent_tools
+        "../../data/access_token.txt",  # Relative to core_tools
+        "./data/access_token.txt"  # Alternative relative path
+    ]
+    
     access_token = None
-    if os.path.exists("access_token.txt"):
-        with open("access_token.txt", "r") as f:
-            access_token = f.read().strip()
+    for path in access_token_paths:
+        if os.path.exists(path):
+            try:
+                with open(path, "r") as f:
+                    access_token = f.read().strip()
+                    print(f"✅ Successfully loaded access token from: {path}")
+                    break
+            except Exception as e:
+                print(f"❌ Error reading access token from {path}: {e}")
+                continue
+                
+    if access_token is None:
+        print("❌ Could not find access_token.txt in any expected location")
     # Initialize connection if tools are available
     if CONNECTION_TOOLS_AVAILABLE:
         print("Initializing Kite Connect session...")

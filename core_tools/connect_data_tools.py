@@ -593,29 +593,59 @@ def fetch_historical_data(symbol: str, from_date: str, to_date: str, interval: s
         return {'status': 'ERROR', 'message': f'Failed to fetch historical data: {str(e)}'}
 
 
-# Connection and Data Tools Registry
-CONNECTION_DATA_TOOLS = {
-    'initialize_connection': initialize_connection,
-    'authenticate_session': authenticate_session,
-    'get_nifty_spot_price': get_nifty_spot_price,
-    'get_nifty_expiry_dates': get_nifty_expiry_dates,
-    'get_options_chain': get_options_chain,
-    'get_historical_volatility': get_historical_volatility,
-    'analyze_options_flow': analyze_options_flow,
-    'fetch_historical_data': fetch_historical_data
-}
+
 
 
 if __name__ == "__main__":
     from dotenv import load_dotenv
     import os
-    load_dotenv(dotenv_path='./.env')
+    
+    # Try multiple possible paths for .env file
+    env_paths = [
+        './.env',  # Current directory
+        '../.env',  # Relative to agent_tools
+        '../../.env',  # Relative to core_tools
+        './.env'  # Alternative relative path
+    ]
+    
+    env_loaded = False
+    for env_path in env_paths:
+        try:
+            load_dotenv(dotenv_path=env_path)
+            print(f"✅ Successfully loaded .env from: {env_path}")
+            env_loaded = True
+            break
+        except Exception:
+            continue
+            
+    if not env_loaded:
+        print("❌ Could not find .env file in any expected location")
+    
     api_key = os.getenv("kite_api_key")
     api_secret = os.getenv("kite_api_secret")
+    
+    # Try multiple possible paths for access token
+    access_token_paths = [
+        "access_token.txt",  # Current directory
+        "../data/access_token.txt",  # Relative to agent_tools
+        "../../data/access_token.txt",  # Relative to core_tools
+        "./data/access_token.txt"  # Alternative relative path
+    ]
+    
     access_token = None
-    if os.path.exists("access_token.txt"):
-        with open("access_token.txt", "r") as f:
-            access_token = f.read().strip()
+    for path in access_token_paths:
+        if os.path.exists(path):
+            try:
+                with open(path, "r") as f:
+                    access_token = f.read().strip()
+                    print(f"✅ Successfully loaded access token from: {path}")
+                    break
+            except Exception as e:
+                print(f"❌ Error reading access token from {path}: {e}")
+                continue
+                
+    if access_token is None:
+        print("❌ Could not find access_token.txt in any expected location")
     print("Script started!")
     print("API Key:", api_key.strip() if api_key else None)
     print("API Secret:", api_secret.strip() if api_secret else None)
@@ -624,3 +654,394 @@ if __name__ == "__main__":
         print("API key or secret not found. Check your .env file and variable names.")
     else:
         print("Environment variables loaded successfully.")
+
+def get_nifty_instruments():
+    """
+    Get the correct instrument symbols and tokens for NIFTY trading.
+    Returns mapping of common names to actual API symbols.
+    """
+    try:
+        # Common NIFTY instrument mappings for Kite Connect
+        nifty_symbols = {
+            "NIFTY_INDEX": "NIFTY 50",  # For spot price
+            "NIFTY_FUTURES": "NIFTY25JANFUT",  # Current month futures
+            "NIFTY_OPTIONS": "NIFTY",  # For options chain
+            "BANKNIFTY_INDEX": "NIFTY BANK",
+            "BANKNIFTY_FUTURES": "BANKNIFTY25JANFUT",
+            "BANKNIFTY_OPTIONS": "BANKNIFTY"
+        }
+        
+        return {
+            "symbols": nifty_symbols,
+            "notes": {
+                "options_format": "NIFTY[EXPIRY][STRIKE][CE/PE]",
+                "futures_format": "NIFTY[EXPIRY]FUT",
+                "index_format": "NIFTY 50",
+                "example_option": "NIFTY25JAN25000CE",
+                "example_future": "NIFTY25JANFUT"
+            }
+        }
+    except Exception as e:
+        return {"error": f"Could not fetch instrument symbols: {str(e)}"}
+
+
+def get_nifty_spot_price_safe():
+    """
+    Get NIFTY spot price with proper error handling and symbol resolution.
+    """
+    try:
+        # Try different symbol formats that Kite might expect
+        possible_symbols = ["NIFTY 50"]
+        
+        for symbol in possible_symbols:
+            try:
+                result = get_nifty_spot_price()  # Your original function
+                if result and 'error' not in str(result).lower():
+                    return result
+            except Exception as e:
+                continue
+        
+        # If all symbols fail, return structured error
+        return {
+            "error": "Could not fetch NIFTY spot price",
+            "tried_symbols": possible_symbols,
+            "suggestion": "Check Kite Connect instrument list or use get_nifty_instruments() tool"
+        }
+        
+    except Exception as e:
+        return {"error": f"NIFTY spot price fetch failed: {str(e)}"}
+
+
+def debug_kite_instruments():
+    """
+    Debug function to check available instruments and find correct NIFTY symbols.
+    """
+    try:
+        debug_info = {
+            "common_issues": [
+                "Symbol format incorrect (try 'NIFTY 50' instead of 'NIFTY')",
+                "Instrument token required instead of symbol",
+                "Exchange prefix needed (NIFTY)",
+                "Case sensitivity (NIFTY vs nifty)"
+            ],
+            "solutions": [
+                "Use kite.instruments() to get all available symbols",
+                "Search for instruments containing 'NIFTY'",
+                "Use instrument tokens instead of symbols",
+                "Check exchange segment (NSE vs NFO)"
+            ]
+        }
+        
+        return debug_info
+        
+    except Exception as e:
+        return {"error": f"Debug failed: {str(e)}"}
+
+
+# Simplified options chain wrapper to handle parameter issues
+def get_options_chain_safe(expiry_date=None, strike_range=10):
+    """
+    Safe wrapper for options chain with fallback parameters
+    """
+    try:
+        if expiry_date is None:
+            # Get appropriate expiry (not too close to expiry)
+            expiry_date = get_appropriate_expiry_date()
+        
+        # Call the actual options chain function
+        result = get_options_chain(expiry_date=expiry_date, strike_range=strike_range)
+        return result
+        
+    except Exception as e:
+        return {
+            'status': 'ERROR',
+            'message': f'Options chain fetch failed: {str(e)}',
+            'expiry_date': expiry_date
+        }
+
+
+def get_appropriate_expiry_date(min_days_to_expiry: int = 4) -> str:
+    """
+    Get an appropriate expiry date that's not too close to expiry.
+    
+    Args:
+        min_days_to_expiry: Minimum days to expiry required (default: 4)
+    
+    Returns:
+        Appropriate expiry date string (YYYY-MM-DD)
+    """
+    try:
+        # Get all future expiry dates
+        expiry_result = get_nifty_expiry_dates('all')
+        if expiry_result.get('status') != 'SUCCESS':
+            return '2025-07-17'  # Fallback to a safe date
+        
+        today = dt.date.today()
+        future_expiries = []
+        
+        for expiry_str in expiry_result.get('expiries', []):
+            try:
+                expiry_date = dt.datetime.strptime(expiry_str, '%Y-%m-%d').date()
+                days_to_expiry = (expiry_date - today).days
+                
+                if days_to_expiry >= min_days_to_expiry:
+                    future_expiries.append({
+                        'date': expiry_str,
+                        'days_to_expiry': days_to_expiry
+                    })
+            except:
+                continue
+        
+        if not future_expiries:
+            return '2025-07-17'  # Fallback
+        
+        # Sort by days to expiry and return the first appropriate one
+        future_expiries.sort(key=lambda x: x['days_to_expiry'])
+        return future_expiries[0]['date']
+        
+    except Exception as e:
+        return '2025-07-17'  # Fallback
+
+
+def get_available_expiry_dates_with_analysis() -> Dict[str, Any]:
+    """
+    Get all available expiry dates with analysis for agent decision making.
+    
+    Returns:
+        Dict with available expiry dates, analysis, and recommendations
+    """
+    try:
+        # Get all future expiry dates
+        expiry_result = get_nifty_expiry_dates('all')
+        if expiry_result.get('status') != 'SUCCESS':
+            return {
+                'status': 'ERROR',
+                'message': 'Failed to get expiry dates'
+            }
+        
+        today = dt.date.today()
+        available_expiries = []
+        
+        for expiry_str in expiry_result.get('expiries', []):
+            try:
+                expiry_date = dt.datetime.strptime(expiry_str, '%Y-%m-%d').date()
+                days_to_expiry = (expiry_date - today).days
+                
+                # Categorize expiry based on days to expiry
+                if days_to_expiry <= 3:
+                    category = 'TOO_CLOSE'
+                    recommendation = 'Avoid - too close to expiry'
+                    risk_level = 'HIGH'
+                elif days_to_expiry <= 10:
+                    category = 'SHORT_TERM'
+                    recommendation = 'Suitable for short-term strategies'
+                    risk_level = 'MEDIUM'
+                elif days_to_expiry <= 14:
+                    category = 'MEDIUM_TERM'
+                    recommendation = 'Good for medium-term strategies'
+                    risk_level = 'LOW'
+                else:
+                    category = 'LONG_TERM'
+                    recommendation = 'Suitable for longer-term strategies'
+                    risk_level = 'LOW'
+                
+                available_expiries.append({
+                    'date': expiry_str,
+                    'days_to_expiry': days_to_expiry,
+                    'category': category,
+                    'recommendation': recommendation,
+                    'risk_level': risk_level,
+                    'suitable_for': {
+                        'TOO_CLOSE': [],
+                        'SHORT_TERM': ['Day trading', 'Scalping', 'Quick momentum plays'],
+                        'MEDIUM_TERM': ['Swing trading', 'Mean reversion', 'Volatility strategies'],
+                        'LONG_TERM': ['Positional trading', 'Theta decay strategies', 'Directional bets']
+                    }.get(category, [])
+                })
+            except:
+                continue
+        
+        # Sort by days to expiry
+        available_expiries.sort(key=lambda x: x['days_to_expiry'])
+        
+        # Find recommended expiries
+        recommended_expiries = [exp for exp in available_expiries if exp['category'] != 'TOO_CLOSE']
+        
+        return {
+            'status': 'SUCCESS',
+            'current_date': today.isoformat(),
+            'total_available': len(available_expiries),
+            'recommended_count': len(recommended_expiries),
+            'available_expiries': available_expiries,
+            'recommended_expiries': recommended_expiries,
+            'analysis': {
+                'short_term_options': len([exp for exp in recommended_expiries if exp['category'] == 'SHORT_TERM']),
+                'medium_term_options': len([exp for exp in recommended_expiries if exp['category'] == 'MEDIUM_TERM']),
+                'long_term_options': len([exp for exp in recommended_expiries if exp['category'] == 'LONG_TERM']),
+                'best_for_day_trading': [exp for exp in recommended_expiries if exp['category'] == 'SHORT_TERM'][:2],
+                'best_for_swing_trading': [exp for exp in recommended_expiries if exp['category'] == 'MEDIUM_TERM'][:2],
+                'best_for_positional': [exp for exp in recommended_expiries if exp['category'] == 'LONG_TERM'][:2]
+            },
+            'recommendations': {
+                'conservative': recommended_expiries[0]['date'] if recommended_expiries else None,
+                'balanced': recommended_expiries[len(recommended_expiries)//2]['date'] if len(recommended_expiries) > 1 else None,
+                'aggressive': recommended_expiries[-1]['date'] if recommended_expiries else None
+            }
+        }
+        
+    except Exception as e:
+        return {
+            'status': 'ERROR',
+            'message': f'Failed to analyze expiry dates: {str(e)}'
+        }
+
+
+# Safe options flow analysis
+def analyze_options_flow_safe(expiry_date=None):
+    """
+    Safe wrapper for options flow analysis
+    """
+    try:
+        if expiry_date is None:
+            # Get appropriate expiry (not too close to expiry)
+            expiry_date = get_appropriate_expiry_date()
+        
+        # Call the actual function with expiry_date
+        result = analyze_options_flow(expiry_date)
+        return result
+        
+    except Exception as e:
+        return {
+            'status': 'ERROR',
+            'message': f'Options flow analysis failed: {str(e)}',
+            'expiry_date': expiry_date
+        }
+
+
+# Global cache for pre-market data
+pre_market_cache = {
+    'data': None,
+    'date': None,
+    'timestamp': None
+}
+
+
+def get_global_market_conditions(current_date: str = None):
+    """
+    Get global market conditions with caching to avoid repeated API calls.
+    This tool is most useful for market opening predictions and early trading decisions.
+    
+    IMPORTANT DISCLAIMER: These global market data points are indicators only and may or may not impact NIFTY.
+    Do not rely solely on these predictions for trading decisions. Always combine with local technical analysis
+    and maintain proper risk management regardless of global predictions.
+    
+    **TIME RESTRICTION**: This tool is only available before 9:30 AM IST (market opening).
+    After 9:30 AM, focus on real-time NIFTY data instead of global indicators.
+    
+    Args:
+        current_date: Date in YYYY-MM-DD format. If None, uses today's date.
+    
+    Returns:
+        Cached global market data with NIFTY gap predictions and trading insights.
+        Note: This data is most relevant for market opening analysis, not for 
+        intraday trading decisions later in the day.
+    """
+    try:
+        from datetime import datetime
+        import pytz
+        
+        # Check current time - restrict access after 9:30 AM
+        ist_timezone = pytz.timezone('Asia/Kolkata')
+        current_time = datetime.now(ist_timezone)
+        current_time_str = current_time.strftime('%H:%M')
+        
+        # If time is after 9:30 AM, return restriction message
+        if current_time.hour > 9 or (current_time.hour == 9 and current_time.minute >= 30):
+            return {
+                'status': 'RESTRICTED',
+                'message': 'Instead of global indicators now you should focus on real nifty data for the day since trading has already started',
+                'current_time': current_time_str,
+                'restriction_reason': 'Market hours - use real-time NIFTY data instead of global indicators',
+                'recommendation': 'Use get_nifty_spot_price_safe(), get_nifty_technical_analysis_tool(), or get_safe_options_chain_data() for current market analysis'
+            }
+        
+        # Use current date if not provided
+        if current_date is None:
+            current_date = current_time.strftime('%Y-%m-%d')
+        
+        # Check cache first
+        if (pre_market_cache['data'] is not None and 
+            pre_market_cache['date'] == current_date):
+            print(f"Using cached pre-market data for {current_date}")
+            return {
+                'status': 'SUCCESS',
+                'source': 'CACHE',
+                'date': current_date,
+                'current_time': current_time_str,
+                'data': pre_market_cache['data'],
+                'note': 'This data is most useful for market opening predictions. For intraday decisions, consider current market conditions.'
+            }
+        
+        # Fetch fresh data
+        print(f"Fetching fresh pre-market data for {current_date}")
+        
+        # Check if fetch_pre_market_data is available
+        try:
+            from pre_market_data import main as fetch_pre_market_data
+            data = fetch_pre_market_data()
+        except ImportError:
+            return {
+                'status': 'ERROR',
+                'message': 'Pre-market data module not available',
+                'date': current_date,
+                'current_time': current_time_str
+            }
+        
+        if data:
+            # Update cache
+            pre_market_cache['data'] = data
+            pre_market_cache['date'] = current_date
+            pre_market_cache['timestamp'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            
+            return {
+                'status': 'SUCCESS',
+                'source': 'FRESH_FETCH',
+                'date': current_date,
+                'current_time': current_time_str,
+                'data': data,
+                'note': 'This data is most useful for market opening predictions. For intraday decisions, consider current market conditions.'
+            }
+        else:
+            return {
+                'status': 'ERROR',
+                'message': 'Failed to fetch pre-market data',
+                'date': current_date,
+                'current_time': current_time_str
+            }
+            
+    except ImportError:
+        return {
+            'status': 'ERROR',
+            'message': 'Pre-market data module not available',
+            'date': current_date
+        }
+    except Exception as e:
+        return {
+            'status': 'ERROR',
+            'message': f'Error fetching global market conditions: {str(e)}',
+            'date': current_date
+        }
+
+
+# Connection and Data Tools Registry
+CONNECTION_DATA_TOOLS = {
+    'initialize_connection': initialize_connection,
+    'authenticate_session': authenticate_session,
+    'get_nifty_spot_price': get_nifty_spot_price,
+    'get_nifty_expiry_dates': get_nifty_expiry_dates,
+    'get_available_expiry_dates_with_analysis': get_available_expiry_dates_with_analysis,
+    'get_options_chain': get_options_chain,
+    'get_historical_volatility': get_historical_volatility,
+    'analyze_options_flow': analyze_options_flow,
+    'fetch_historical_data': fetch_historical_data
+}
