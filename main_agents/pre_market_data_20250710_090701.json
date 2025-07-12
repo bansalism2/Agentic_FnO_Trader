@@ -1,0 +1,288 @@
+{
+  "metadata": {
+    "fetch_time": "2025-07-10 09:07:01",
+    "fetch_timestamp": 1752118621,
+    "timezone": "Asia/Kolkata",
+    "total_tickers": 10,
+    "successful_fetches": 10,
+    "data_quality_score": 100.0,
+    "market_status": {
+      "US_Markets": "CLOSED",
+      "Japan_Nikkei": "OPEN",
+      "Hong_Kong": "OPEN",
+      "South_Korea": "OPEN"
+    },
+    "prediction_version": "improved_v2.0"
+  },
+  "nifty_prediction": {
+    "expected_gap_percent": 2.2,
+    "gap_type": "GAP_UP",
+    "gap_strength": "STRONG",
+    "confidence_score": 87.3,
+    "gap_range_low": 2.14,
+    "gap_range_high": 2.27,
+    "contributing_factors": {
+      "us_markets_impact": 1.03,
+      "asian_markets_impact": 0.06,
+      "commodities_impact": -0.04,
+      "currency_impact": 0.02,
+      "sentiment_impact": 1.15
+    },
+    "total_weighted_impact": 2.2,
+    "contributing_tickers": [
+      {
+        "ticker": "^GSPC",
+        "raw_change": 0.61,
+        "dampened_change": 0.61,
+        "correlation": 0.55,
+        "impact": 0.34
+      },
+      {
+        "ticker": "^IXIC",
+        "raw_change": 0.94,
+        "dampened_change": 0.94,
+        "correlation": 0.5,
+        "impact": 0.47
+      },
+      {
+        "ticker": "^DJI",
+        "raw_change": 0.49,
+        "dampened_change": 0.49,
+        "correlation": 0.45,
+        "impact": 0.22
+      },
+      {
+        "ticker": "^N225",
+        "raw_change": -0.53,
+        "dampened_change": -0.53,
+        "correlation": 0.35,
+        "impact": -0.19
+      },
+      {
+        "ticker": "^HSI",
+        "raw_change": 0.09,
+        "dampened_change": 0.09,
+        "correlation": 0.3,
+        "impact": 0.03
+      },
+      {
+        "ticker": "^KS11",
+        "raw_change": 0.86,
+        "dampened_change": 0.86,
+        "correlation": 0.25,
+        "impact": 0.21
+      },
+      {
+        "ticker": "CL=F",
+        "raw_change": -0.04,
+        "dampened_change": -0.04,
+        "correlation": -0.15,
+        "impact": 0.01
+      },
+      {
+        "ticker": "GC=F",
+        "raw_change": 0.6,
+        "dampened_change": 0.6,
+        "correlation": -0.08,
+        "impact": -0.05
+      },
+      {
+        "ticker": "USDINR=X",
+        "raw_change": -0.08,
+        "dampened_change": -0.08,
+        "correlation": -0.2,
+        "impact": 0.02
+      },
+      {
+        "ticker": "^VIX",
+        "raw_change": -5.18,
+        "dampened_change": -3.27,
+        "correlation": -0.35,
+        "impact": 1.15
+      }
+    ],
+    "methodology": {
+      "dampening_applied": true,
+      "dynamic_correlations": true,
+      "confidence_factors": [
+        "data_quality",
+        "market_consensus",
+        "vix_stability",
+        "prediction_magnitude",
+        "timing"
+      ]
+    }
+  },
+  "market_sentiment": {
+    "overall_sentiment": "BULLISH",
+    "sentiment_breakdown": {
+      "us_sentiment": "BULLISH",
+      "asian_sentiment": "NEUTRAL",
+      "risk_sentiment": "NEUTRAL",
+      "commodity_sentiment": "NEUTRAL"
+    },
+    "sentiment_score": 1,
+    "market_fear_level": "NEUTRAL"
+  },
+  "market_data": {
+    "^GSPC": {
+      "ticker": "^GSPC",
+      "name": "S&P 500",
+      "current_price": 6263.2598,
+      "previous_close": 6225.52,
+      "change": 37.7397,
+      "change_pct": 0.61,
+      "volume": 4813340000,
+      "volatility": 0.48,
+      "high": 6269.1602,
+      "low": 6231.4302,
+      "open": 6243.3301,
+      "last_updated": "2025-07-10 09:06:56"
+    },
+    "^IXIC": {
+      "ticker": "^IXIC",
+      "name": "NASDAQ Composite",
+      "current_price": 20611.3398,
+      "previous_close": 20418.4609,
+      "change": 192.8789,
+      "change_pct": 0.94,
+      "volume": 9978310000,
+      "volatility": 0.65,
+      "high": 20645.4102,
+      "low": 20486.3809,
+      "open": 20522.0898,
+      "last_updated": "2025-07-10 09:06:56"
+    },
+    "^DJI": {
+      "ticker": "^DJI",
+      "name": "Dow Jones Industrial Average",
+      "current_price": 44458.3008,
+      "previous_close": 44240.7617,
+      "change": 217.5391,
+      "change_pct": 0.49,
+      "volume": 531790000,
+      "volatility": 0.61,
+      "high": 44556.6797,
+      "low": 44225.8789,
+      "open": 44327.1289,
+      "last_updated": "2025-07-10 09:06:57"
+    },
+    "^N225": {
+      "ticker": "^N225",
+      "name": "Nikkei 225",
+      "current_price": 39610.6094,
+      "previous_close": 39821.2812,
+      "change": -210.6719,
+      "change_pct": -0.53,
+      "volume": 0,
+      "volatility": 0.61,
+      "high": 39795.75,
+      "low": 39547.2617,
+      "open": 39795.75,
+      "last_updated": "2025-07-10 09:06:57"
+    },
+    "^HSI": {
+      "ticker": "^HSI",
+      "name": "HANG SENG INDEX",
+      "current_price": 23913.6191,
+      "previous_close": 23892.3203,
+      "change": 21.2988,
+      "change_pct": 0.09,
+      "volume": 0,
+      "volatility": 0.81,
+      "high": 23970.4004,
+      "low": 23820.5801,
+      "open": 23865.6406,
+      "last_updated": "2025-07-10 09:06:58"
+    },
+    "^KS11": {
+      "ticker": "^KS11",
+      "name": "KOSPI Composite Index",
+      "current_price": 3160.78,
+      "previous_close": 3133.74,
+      "change": 27.04,
+      "change_pct": 0.86,
+      "volume": 371972,
+      "volatility": 0.18,
+      "high": 3170.6499,
+      "low": 3133.8101,
+      "open": 3144.1399,
+      "last_updated": "2025-07-10 09:06:58"
+    },
+    "CL=F": {
+      "ticker": "CL=F",
+      "name": "Crude Oil Aug 25",
+      "current_price": 68.3,
+      "previous_close": 68.33,
+      "change": -0.03,
+      "change_pct": -0.04,
+      "volume": 6243,
+      "volatility": 0.45,
+      "high": 68.39,
+      "low": 68.04,
+      "open": 68.29,
+      "last_updated": "2025-07-10 09:06:59"
+    },
+    "GC=F": {
+      "ticker": "GC=F",
+      "name": "Gold Aug 25",
+      "current_price": 3326.8,
+      "previous_close": 3307.0,
+      "change": 19.8,
+      "change_pct": 0.6,
+      "volume": 20105,
+      "volatility": 0.96,
+      "high": 3334.7,
+      "low": 3321.3999,
+      "open": 3322.2,
+      "last_updated": "2025-07-10 09:06:59"
+    },
+    "USDINR=X": {
+      "ticker": "USDINR=X",
+      "name": "USD/INR",
+      "current_price": 85.6375,
+      "previous_close": 85.7074,
+      "change": -0.0699,
+      "change_pct": -0.08,
+      "volume": 0,
+      "volatility": 0.09,
+      "high": 85.691,
+      "low": 85.56,
+      "open": 85.65,
+      "last_updated": "2025-07-10 09:07:00"
+    },
+    "^VIX": {
+      "ticker": "^VIX",
+      "name": "CBOE Volatility Index",
+      "current_price": 15.94,
+      "previous_close": 16.81,
+      "change": -0.87,
+      "change_pct": -5.18,
+      "volume": 0,
+      "volatility": 0.24,
+      "high": 16.76,
+      "low": 15.76,
+      "open": 16.76,
+      "last_updated": "2025-07-10 09:07:01"
+    }
+  },
+  "trading_signals": [
+    {
+      "signal_type": "GAP_UP_TRADE",
+      "action": "BUY_CALLS",
+      "reason": "Bullish gap expected: 2.2% (Confidence: 87.3%)",
+      "confidence": 87.3,
+      "strategy": "Consider ATM calls or bull call spread"
+    }
+  ],
+  "key_alerts": [],
+  "summary": {
+    "expected_nifty_move": "+2.2%",
+    "gap_type": "GAP_UP",
+    "overall_sentiment": "BULLISH",
+    "confidence": 87.3,
+    "risk_level": "NEUTRAL",
+    "recommendation": "BUY",
+    "prediction_reliability": "HIGH"
+  }
+}

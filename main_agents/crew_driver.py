@@ -3,11 +3,11 @@
 AlgoTrade Crew Driver - Automated trading crew execution
 
 This script runs the AlgoTrade agents with split functionality:
-- Opportunity Hunter Agent: Every 15 minutes (finds new trading opportunities with fast-track analysis)
+- Opportunity Hunter Agent: Every 15 minutes (finds new trading opportunities with three-stage analysis)
 - Position Manager Agent: Every 15 minutes (manages existing positions)
 
 Agents run sequentially to avoid conflicts during market hours (9:15 AM to 3:30 PM IST).
-Fast-track analysis enables more frequent opportunity hunting without performance degradation.
+Three-stage analysis enables optimal token efficiency and speed for all market conditions.
 
 @author: AlgoTrade Team
 """
@@ -86,14 +86,34 @@ def refresh_access_token():
         logger.error(f"Error refreshing access token: {e}")
         return False
 
+def check_pre_market_data_exists():
+    """
+    Check if pre-market data was already fetched today
+    """
+    try:
+        today = datetime.now().strftime('%Y%m%d')
+        # Look for any pre-market data file from today
+        for file in current_dir.glob(f"pre_market_data_{today}_*.json"):
+            return True
+        return False
+    except Exception:
+        return False
+
 def fetch_pre_market_data():
     """
     Fetch pre-market global market data before market opens
     """
     try:
+        # Check if pre-market data was already fetched today
+        if check_pre_market_data_exists():
+            logger.info("Pre-market data already fetched today - skipping duplicate fetch")
+            return True
+            
         logger.info("Fetching pre-market global market data...")
         
         # Import pre-market data module
+        import sys
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
         from data.pre_market_data import fetch_pre_market_data as fetch_data, get_json_output
         
         # Fetch the data
@@ -143,6 +163,48 @@ def fetch_pre_market_data():
         logger.error(f"Traceback: {traceback.format_exc()}")
         return False
 
+def refresh_iv_cache():
+    """
+    Refresh IV cache data for enhanced analysis
+    """
+    try:
+        logger.info("Refreshing IV cache data...")
+        
+        # Import IV data manager
+        import sys
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+        from iv_data_manager import IVDataManager
+        
+        # Initialize IV manager and refresh data
+        iv_manager = IVDataManager()
+        refresh_success = iv_manager.refresh_if_needed(force_refresh=True)
+        
+        if refresh_success:
+            logger.info("IV cache refreshed successfully")
+            
+            # Get comprehensive analysis for logging
+            analysis = iv_manager.get_comprehensive_analysis()
+            if analysis.get('status') == 'SUCCESS':
+                summary = analysis.get('summary', {})
+                logger.info("IV Analysis Summary:")
+                logger.info(f"  Current IV: {summary.get('current_iv', 'N/A')}")
+                logger.info(f"  IV Percentile: {summary.get('iv_percentile', 'N/A')}")
+                logger.info(f"  Market Condition: {summary.get('market_condition', 'N/A')}")
+                logger.info(f"  Volatility Regime: {summary.get('volatility_regime', 'N/A')}")
+                logger.info(f"  Recommendation: {summary.get('recommendation', 'N/A')}")
+            
+            return True
+        else:
+            logger.warning("IV cache refresh failed")
+            return False
+            
+    except ImportError as e:
+        logger.error(f"Failed to import IV data manager: {e}")
+        return False
+    except Exception as e:
+        logger.error(f"Error refreshing IV cache: {e}")
+        return False
+
 def cleanup_active_trades():
     """
     Clean up active_trades.json at market close (3:30 PM)
@@ -152,8 +214,8 @@ def cleanup_active_trades():
         logger.info("MARKET CLOSE CLEANUP - CLEANING ACTIVE TRADES")
         logger.info("=" * 80)
         
-        # Path to active_trades.json
-        active_trades_path = current_dir / "trade_storage" / "active_trades.json"
+        # Path to active_trades.json (relative to main_agents directory)
+        active_trades_path = current_dir / ".." / "trade_storage" / "active_trades.json"
         
         if active_trades_path.exists():
             # Read current active trades
@@ -164,7 +226,7 @@ def cleanup_active_trades():
             
             # Clear active trades (all positions should be closed by broker at 3:20 PM)
             with open(active_trades_path, 'w') as f:
-                json.dump([], f, indent=2)
+                json.dump({}, f, indent=2)
             
             logger.info("Active trades cleared successfully")
             logger.info("All positions should have been auto-closed by broker at 3:20 PM")
@@ -220,28 +282,30 @@ def run_opportunity_hunter(force_run=False):
             logger.info("Market is closed. Skipping opportunity hunter execution.")
             return
         
-        # Check if after 2:30 PM IST
+        # Check if after 2:30 PM IST (TEMPORARILY DISABLED FOR TESTING)
         ist_now = datetime.now(IST_TIMEZONE)
         if ist_now.time() >= dt_time(14, 30):
             logger.info("After 2:30 PM IST. No new trades allowed. Skipping opportunity hunter execution.")
-            return
+            logger.info("[TESTING MODE] 2:30 PM check temporarily disabled - continuing execution")
+            # return  # TEMPORARILY COMMENTED OUT FOR TESTING
         
-        # Import and run the fast-track opportunity hunter agent
-        from opportunity_hunter_agent_fast_track import opportunity_hunter_crew
-        logger.info("Executing fast-track opportunity hunter crew...")
+        # Import and run the enhanced three-stage opportunity hunter agent with AI agents
+        from opportunity_hunter_agent_enhanced_three_stage import run_enhanced_three_stage_opportunity_hunter
+        logger.info("Executing enhanced three-stage opportunity hunter with AI agents...")
         
-        result = opportunity_hunter_crew.kickoff()
+        # Run the enhanced three-stage opportunity hunter with full AI agent logic
+        result = run_enhanced_three_stage_opportunity_hunter()
         
         logger.info("=" * 80)
-        logger.info("OPPORTUNITY HUNTER EXECUTION COMPLETED")
+        logger.info("THREE-STAGE OPPORTUNITY HUNTER EXECUTION COMPLETED")
         logger.info("=" * 80)
         logger.info(f"Result: {result}")
         logger.info("=" * 80)
         
     except ImportError as e:
-        error_msg = f"Failed to import opportunity_hunter_agent_fast_track: {e}"
+        error_msg = f"Failed to import opportunity_hunter_agent_enhanced_three_stage_crew_compatible: {e}"
         logger.error(error_msg)
-        logger.error("Make sure opportunity_hunter_agent_fast_track.py is in the same directory")
+        logger.error("Make sure opportunity_hunter_agent_enhanced_three_stage_crew_compatible.py is in the same directory")
         logger.info("Skipping this run and waiting for next scheduled execution...")
         return False
     except Exception as e:
@@ -268,11 +332,11 @@ def run_position_manager(force_run=False):
             logger.info("Market is closed. Skipping position manager execution.")
             return
         
-        # Import and run the position manager agent
-        from position_manager_agent import ultra_conservative_crew
-        logger.info("Executing position manager crew...")
+        # Import and run the hybrid position manager agent
+        from position_manager_agent_hybrid import run_ultra_conservative_position_manager_hybrid
+        logger.info("Executing position manager (hybrid)...")
         
-        result = ultra_conservative_crew.kickoff()
+        result = run_ultra_conservative_position_manager_hybrid()
         
         logger.info("=" * 80)
         logger.info("POSITION MANAGER EXECUTION COMPLETED")
@@ -281,9 +345,9 @@ def run_position_manager(force_run=False):
         logger.info("=" * 80)
         
     except ImportError as e:
-        error_msg = f"Failed to import position_manager_agent: {e}"
+        error_msg = f"Failed to import position_manager_agent_hybrid: {e}"
         logger.error(error_msg)
-        logger.error("Make sure position_manager_agent.py is in the same directory")
+        logger.error("Make sure position_manager_agent_hybrid.py is in the same directory")
         logger.info("Skipping this run and waiting for next scheduled execution...")
         return False
     except Exception as e:
@@ -295,35 +359,83 @@ def run_position_manager(force_run=False):
     
     return True
 
+def force_square_off_all_positions():
+    """
+    Force square-off of all open NIFTY positions at 3:15 PM, regardless of other processes.
+    """
+    try:
+        logger.info("=" * 80)
+        logger.info("FORCED SQUARE-OFF TRIGGERED AT 3:15 PM - CLOSING ALL POSITIONS")
+        logger.info("=" * 80)
+        from position_manager_agent_hybrid import get_portfolio_positions, square_off_positions
+        
+        positions_result = get_portfolio_positions()
+        if positions_result.get('status') == 'SUCCESS':
+            positions = positions_result.get('positions', [])
+            nifty_positions = [p for p in positions if 'NIFTY' in p.get('tradingsymbol', '') or 'NIFTY' in p.get('symbol', '')]
+            if nifty_positions:
+                logger.info(f"Found {len(nifty_positions)} NIFTY positions to force close.")
+                square_off_positions(nifty_positions)
+                logger.info("All NIFTY positions forcibly squared off at 3:15 PM.")
+            else:
+                logger.info("No NIFTY positions to force close at 3:15 PM.")
+        else:
+            logger.error(f"Failed to fetch positions for forced square-off: {positions_result.get('message', 'Unknown error')}")
+        logger.info("=" * 80)
+        logger.info("FORCED SQUARE-OFF COMPLETED")
+        logger.info("=" * 80)
+    except Exception as e:
+        logger.error(f"Error during forced square-off: {e}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
+
 def schedule_agent_execution(force_run=False):
     """
     Schedule agent execution with specified frequencies
+    - Pre-market data: At 9:00 AM or immediately if started late
     - Opportunity Hunter: Every 15 minutes (fast-track enabled)
     - Position Manager: Every 15 minutes
     - Market Close Cleanup: At 3:30 PM
     """
     logger.info("Setting up agent schedule...")
     
-    # Schedule pre-market data fetch at 9:00 AM
-    schedule.every().day.at("09:00").do(fetch_pre_market_data)
+    # Check if we need to run pre-market data fetch immediately
+    ist_now = datetime.now(IST_TIMEZONE)
+    current_time = ist_now.time()
+    pre_market_time = dt_time(9, 0)  # 9:00 AM
+    
+    # If it's after 9:00 AM but before 9:30 AM, run pre-market data immediately
+    if pre_market_time <= current_time < dt_time(9, 30):
+        logger.info("Started after 9:00 AM - running pre-market data fetch immediately...")
+        fetch_pre_market_data()
+        logger.info("Pre-market data fetch completed")
+    else:
+        # Schedule pre-market data fetch at 9:00 AM for next day
+        schedule.every().day.at("09:00").do(fetch_pre_market_data)
+        logger.info("Pre-market data fetch scheduled for 9:00 AM")
     
     # Schedule opportunity hunter every 15 minutes (fast-track optimized)
-    schedule.every(15).minutes.do(run_opportunity_hunter, force_run=force_run)
+    # schedule.every(15).minutes.do(run_opportunity_hunter, force_run=force_run)
     
     # Schedule position manager every 15 minutes
     schedule.every(15).minutes.do(run_position_manager, force_run=force_run)
     
-    # Schedule market close cleanup at 3:30 PM
-    schedule.every().day.at("15:30").do(cleanup_active_trades)
+    # Schedule market close cleanup at 3:35 PM (after 3:15 PM square-off)
+    schedule.every().day.at("15:35").do(cleanup_active_trades)
+    
+    # Schedule forced square-off at 3:15 PM
+    schedule.every().day.at("15:15").do(force_square_off_all_positions)
     
     logger.info("Agent schedule configured:")
-    logger.info("- 9:00 AM: Pre-market data fetch")
-    logger.info("- Every 15 minutes: Fast-track Opportunity Hunter Agent (new opportunities)")
+    if pre_market_time <= current_time < dt_time(9, 30):
+        logger.info("- Pre-market data: Already fetched (late start)")
+    else:
+        logger.info("- 9:00 AM: Pre-market data fetch")
+    # logger.info("- Every 15 minutes: Three-Stage Opportunity Hunter Agent (new opportunities)")
     logger.info("- Every 15 minutes: Position Manager Agent (existing positions)")
-    logger.info("- 3:30 PM: Market close cleanup (clear active_trades.json)")
+    logger.info("- 3:35 PM: Market close cleanup (clear active_trades.json)")
     logger.info(f"Market hours: {MARKET_START_TIME.strftime('%H:%M')} - {MARKET_END_TIME.strftime('%H:%M')} IST")
     logger.info("Agents run sequentially to avoid conflicts")
-    logger.info("Fast-track analysis enables more frequent opportunity hunting")
+    logger.info("Three-stage analysis enables optimal token efficiency and speed")
     logger.info("Failed runs are skipped (no retries) - wait for next scheduled execution")
     logger.info("Press Ctrl+C to stop the driver")
 
@@ -343,6 +455,12 @@ def main(force_run=False):
         if not token_refreshed:
             logger.warning("Failed to refresh access token. Proceeding with existing token...")
         
+        # Refresh IV cache for enhanced analysis
+        logger.info("Step 2: Refreshing IV cache...")
+        iv_refreshed = refresh_iv_cache()
+        if not iv_refreshed:
+            logger.warning("Failed to refresh IV cache. Proceeding with basic analysis...")
+        
         # Setup schedule
         schedule_agent_execution(force_run=force_run)
         
@@ -356,10 +474,10 @@ def main(force_run=False):
             if not pm_success:
                 logger.warning("Initial position manager run failed - will retry at next scheduled time")
             
-            logger.info("Step 3: Running initial opportunity hunter...")
-            oh_success = run_opportunity_hunter(force_run=force_run)
-            if not oh_success:
-                logger.warning("Initial opportunity hunter run failed - will retry at next scheduled time")
+            # logger.info("Step 3: Running initial opportunity hunter...")
+            # oh_success = run_opportunity_hunter(force_run=force_run)
+            # if not oh_success:
+            #     logger.warning("Initial opportunity hunter run failed - will retry at next scheduled time")
         else:
             logger.info("Market is closed. Waiting for market hours...")
         
@@ -396,6 +514,10 @@ def run_single_execution(force_run=False):
     logger.info("Refreshing access token...")
     refresh_access_token()
     
+    # Refresh IV cache for enhanced analysis
+    logger.info("Refreshing IV cache...")
+    refresh_iv_cache()
+    
     # Run position manager first
     logger.info("Running position manager...")
     pm_success = run_position_manager(force_run=force_run)
@@ -403,10 +525,10 @@ def run_single_execution(force_run=False):
         logger.warning("Position manager run failed")
     
     # Run opportunity hunter second
-    logger.info("Running opportunity hunter...")
-    oh_success = run_opportunity_hunter(force_run=force_run)
-    if not oh_success:
-        logger.warning("Opportunity hunter run failed")
+    # logger.info("Running opportunity hunter...")
+    # oh_success = run_opportunity_hunter(force_run=force_run)
+    # if not oh_success:
+    #     logger.warning("Opportunity hunter run failed")
     
     logger.info("Single execution completed")
 

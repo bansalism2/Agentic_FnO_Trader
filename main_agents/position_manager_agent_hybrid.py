@@ -100,7 +100,8 @@ except ImportError:
 
 # Add parent directory to Python path for imports
 import sys
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 # Import all required tools from their appropriate modules
 try:
@@ -570,87 +571,234 @@ def square_off_positions(positions):
 # MAIN EXECUTION FUNCTION
 # ============================================================================
 
-def run_ultra_conservative_position_manager():
+def run_ultra_conservative_position_manager_hybrid():
     """
-    Main execution function for the ultra-conservative position manager.
+    HYBRID: Crew-compatible version that combines direct analysis with LLM reasoning
     """
     print("\n" + "="*80)
-    print("🎯 ULTRA-CONSERVATIVE POSITION MANAGER STARTING")
+    print("🎯 ULTRA-CONSERVATIVE POSITION MANAGER (HYBRID)")
     print(f"📅 Current Time: {current_datetime}")
-    print("🔄 Mission: Hold positions, let time decay work, exit only when absolutely necessary")
+    print("🔄 Mission: Direct analysis + LLM reasoning for optimal decisions")
     print("="*80)
     
     try:
-        # Fetch current positions first
+        # STEP 1: Direct Position Analysis (Fast)
+        print("\n📊 STEP 1: Direct Position Analysis")
         positions_result = get_portfolio_positions()
-        open_positions = positions_result.get('positions', [])
-        if not open_positions:
-            print("✅ No open positions found - nothing to manage.")
-            return "No open positions to manage."
         
-        # Check if current time is after 3:15 PM
-        now = datetime.now().time()
-        if now > dt_time(15, 15):
-            print(f"⏰ Current time {now.strftime('%H:%M:%S')} > 15:15:00. Initiating square-off protocol.")
-            square_off_positions(open_positions)
-            return "All positions squared off after 3:15 PM."
-        
-        # Otherwise, proceed with normal crew logic
-        result = ultra_conservative_crew.kickoff()
-        
-        print("\n" + "="*80)
-        print("📊 ULTRA-CONSERVATIVE POSITION MANAGER RESULTS")
-        print("="*80)
-        print(result)
-        
-        # Additional summary
-        print("\n" + "-"*80)
-        print("💡 ULTRA-CONSERVATIVE MANAGEMENT SUMMARY:")
-        print("   ✅ Default Action: HOLD positions for time decay")
-        print("   ⚡ Emergency Exits: Only when absolutely necessary")
-        print("   💰 Cost-Aware: Every exit economically justified")
-        print("   📈 Time Decay: Primary source of F&O profits")
-        print("   🛡️ Capital Protection: Through patience, not premature action")
-        print("-"*80)
-        
-        return result
-        
+        if positions_result.get('status') == 'SUCCESS':
+            positions = positions_result.get('positions', [])
+            nifty_positions = [p for p in positions if 'NIFTY' in p.get('tradingsymbol', '') or 'NIFTY' in p.get('symbol', '')]
+            
+            print(f"📊 Total Positions: {len(positions)}")
+            print(f"📈 NIFTY Positions: {len(nifty_positions)}")
+            
+            if len(nifty_positions) == 0:
+                print("✅ NO POSITIONS TO MANAGE - TASK COMPLETE")
+                return {
+                    'status': 'SUCCESS',
+                    'decision': 'NO_POSITIONS',
+                    'analysis_type': 'DIRECT_ONLY',
+                    'positions_count': 0,
+                    'nifty_positions_count': 0,
+                    'recommendation': 'No positions to manage - system idle',
+                    'timestamp': datetime.now().isoformat()
+                }
+            
+            # Get current spot price
+            spot_result = get_nifty_spot_price_safe()
+            current_spot = spot_result.get('spot_price', 0) if spot_result else 0
+            
+            # Direct analysis of each position
+            position_analysis = []
+            total_pnl = 0
+            total_exposure = 0
+            
+            for position in nifty_positions:
+                symbol = position.get('tradingsymbol', position.get('symbol', ''))
+                quantity = position.get('quantity', 0)
+                average_price = position.get('average_price', 0)
+                last_price = position.get('last_price', 0)
+                
+                # Calculate P&L
+                if quantity > 0:  # Long position
+                    pnl = (last_price - average_price) * quantity
+                else:  # Short position
+                    pnl = (average_price - last_price) * abs(quantity)
+                
+                pnl_percentage = (pnl / (average_price * abs(quantity))) * 100 if average_price > 0 else 0
+                
+                position_info = {
+                    'symbol': symbol,
+                    'quantity': quantity,
+                    'average_price': average_price,
+                    'last_price': last_price,
+                    'pnl': pnl,
+                    'pnl_percentage': pnl_percentage,
+                    'exposure': abs(quantity * last_price)
+                }
+                
+                position_analysis.append(position_info)
+                total_pnl += pnl
+                total_exposure += position_info['exposure']
+                
+                print(f"   📊 {symbol}: Qty={quantity}, P&L=₹{pnl:.2f} ({pnl_percentage:.2f}%)")
+            
+            # STEP 2: Check for Emergency Conditions (Direct Logic)
+            print("\n🚨 STEP 2: Emergency Condition Check")
+            emergency_exit_needed = False
+            emergency_reason = ""
+            
+            # Check time-based conditions
+            current_time_obj = datetime.now().time()
+            close_time = dt_time(15, 15)  # 3:15 PM
+            
+            if current_time_obj >= close_time:
+                emergency_exit_needed = True
+                emergency_reason = "MARKET CLOSE - Positions will auto square off"
+                print(f"⚠️  EMERGENCY: {emergency_reason}")
+            
+            # Check for catastrophic losses
+            for pos in position_analysis:
+                if pos['pnl_percentage'] < -30:  # Catastrophic loss
+                    emergency_exit_needed = True
+                    emergency_reason = f"EMERGENCY EXIT - Catastrophic loss in {pos['symbol']}"
+                    print(f"⚠️  EMERGENCY: {emergency_reason}")
+                    break
+            
+            if emergency_exit_needed:
+                print(f"🚨 EXECUTING EMERGENCY EXIT: {emergency_reason}")
+                
+                # Actually execute the square-off
+                if current_time_obj >= close_time:
+                    print("⏰ 3:15 PM reached - Executing forced square-off...")
+                    square_off_positions(nifty_positions)
+                else:
+                    print("💥 Catastrophic loss detected - Executing emergency exit...")
+                    square_off_positions(nifty_positions)
+                
+                return {
+                    'status': 'SUCCESS',
+                    'decision': 'EMERGENCY_EXIT_EXECUTED',
+                    'analysis_type': 'DIRECT_ONLY',
+                    'positions_count': len(positions),
+                    'nifty_positions_count': len(nifty_positions),
+                    'total_pnl': total_pnl,
+                    'total_exposure': total_exposure,
+                    'current_spot_price': current_spot,
+                    'position_analysis': position_analysis,
+                    'recommendation': f"EMERGENCY EXIT EXECUTED: {emergency_reason}",
+                    'timestamp': datetime.now().isoformat()
+                }
+            
+            # STEP 3: LLM Analysis (Only if no emergency)
+            print("\n🤖 STEP 3: LLM Analysis for Sophisticated Decision Making")
+            
+            # Check if current time is after 2:30 PM (no new trades allowed)
+            if current_time_obj >= dt_time(14, 30):
+                print("⏰ After 2:30 PM - No new trades allowed, using direct analysis only")
+                direct_recommendation = "HOLD - Ultra-conservative management (after 2:30 PM)"
+                
+                return {
+                    'status': 'SUCCESS',
+                    'decision': 'HOLD_POSITIONS',
+                    'analysis_type': 'DIRECT_ONLY',
+                    'positions_count': len(positions),
+                    'nifty_positions_count': len(nifty_positions),
+                    'total_pnl': total_pnl,
+                    'total_exposure': total_exposure,
+                    'current_spot_price': current_spot,
+                    'position_analysis': position_analysis,
+                    'recommendation': direct_recommendation,
+                    'timestamp': datetime.now().isoformat()
+                }
+            
+            # Run LLM analysis for sophisticated decision making
+            try:
+                print("🔄 Running LLM crew analysis...")
+                llm_result = ultra_conservative_crew.kickoff()
+                
+                print("\n" + "="*80)
+                print("📊 HYBRID ANALYSIS RESULTS")
+                print("="*80)
+                print(f"📈 Direct Analysis: {len(nifty_positions)} positions, ₹{total_pnl:.2f} P&L")
+                print(f"🤖 LLM Analysis: {llm_result}")
+                print("="*80)
+                
+                # Combine direct and LLM analysis
+                combined_recommendation = "HOLD - Ultra-conservative management with LLM validation"
+                
+                return {
+                    'status': 'SUCCESS',
+                    'decision': 'HOLD_POSITIONS',
+                    'analysis_type': 'HYBRID',
+                    'positions_count': len(positions),
+                    'nifty_positions_count': len(nifty_positions),
+                    'total_pnl': total_pnl,
+                    'total_exposure': total_exposure,
+                    'current_spot_price': current_spot,
+                    'position_analysis': position_analysis,
+                    'llm_analysis': llm_result,
+                    'recommendation': combined_recommendation,
+                    'timestamp': datetime.now().isoformat()
+                }
+                
+            except Exception as llm_error:
+                print(f"⚠️  LLM analysis failed: {llm_error}")
+                print("🔄 Falling back to direct analysis only")
+                
+                return {
+                    'status': 'SUCCESS',
+                    'decision': 'HOLD_POSITIONS',
+                    'analysis_type': 'DIRECT_ONLY (LLM failed)',
+                    'positions_count': len(positions),
+                    'nifty_positions_count': len(nifty_positions),
+                    'total_pnl': total_pnl,
+                    'total_exposure': total_exposure,
+                    'current_spot_price': current_spot,
+                    'position_analysis': position_analysis,
+                    'recommendation': 'HOLD - Ultra-conservative management (LLM fallback)',
+                    'timestamp': datetime.now().isoformat()
+                }
+                
+        else:
+            print(f"❌ Failed to get positions: {positions_result.get('message', 'Unknown error')}")
+            return {
+                'status': 'ERROR',
+                'decision': 'ERROR',
+                'error': positions_result.get('message', 'Failed to get positions'),
+                'recommendation': 'Error in position analysis',
+                'timestamp': datetime.now().isoformat()
+            }
+            
     except Exception as e:
-        print(f"\n❌ Error in position manager execution: {e}")
-        print("🔄 Attempting graceful recovery...")
-        
-        # Fallback: Basic position check
-        try:
-            positions = get_portfolio_positions()
-            if positions.get('total_positions', 0) == 0:
-                print("✅ No positions found - no management required")
-                return "No positions to manage"
-            else:
-                print(f"⚠️ Found {positions.get('total_positions', 0)} positions but execution failed")
-                print("🔄 Manual review recommended")
-                return f"Execution failed but {positions.get('total_positions', 0)} positions need review"
-        except Exception as fallback_error:
-            print(f"❌ Fallback also failed: {fallback_error}")
-            return "Critical error - manual intervention required"
+        print(f"❌ Hybrid position manager failed: {str(e)}")
+        return {
+            'status': 'ERROR',
+            'error': str(e),
+            'recommendation': 'Error in hybrid position manager',
+            'timestamp': datetime.now().isoformat()
+        }
 
 # ============================================================================
 # MAIN EXECUTION
 # ============================================================================
 
 if __name__ == "__main__":
-    print("🚀 Starting Ultra-Conservative Position Manager Agent...")
-    print("📋 This agent prioritizes time decay optimization over premature exits")
-    print("💰 Every exit decision includes comprehensive cost-benefit analysis")
-    print("🎯 Goal: Maximize profitability through patience and discipline")
-    
-    # Run the position manager
-    final_result = run_ultra_conservative_position_manager()
+    print("🚀 Starting Ultra-Conservative Position Manager (HYBRID)...")
+    print("📋 Mission: Direct analysis + LLM reasoning for optimal decisions")
+    print("💰 Hybrid approach: Fast direct analysis + sophisticated LLM validation")
+    print("🎯 Goal: Best of both worlds - speed and intelligence")
+    print("-" * 50)
+
+    # Run the hybrid position manager
+    final_result = run_ultra_conservative_position_manager_hybrid()
     
     print("\n" + "="*80)
-    print("🏁 ULTRA-CONSERVATIVE POSITION MANAGER COMPLETED")
-    print(f"⏰ Completion Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    print(f"🏁 ULTRA-CONSERVATIVE POSITION MANAGER (HYBRID) COMPLETED - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print("="*80)
-    print("\n📈 Remember: Time decay is your friend in F&O trading!")
-    print("💡 Most profitable strategy: Hold positions and let theta work")
-    print("⚡ Exit only when absolutely necessary and economically justified")
-    print("\n" + "="*80)
+    print(f"📊 Final Status: {final_result.get('status', 'UNKNOWN')}")
+    print(f"💡 Analysis Type: {final_result.get('analysis_type', 'UNKNOWN')}")
+    print(f"🎯 Recommendation: {final_result.get('recommendation', 'No recommendation')}")
+    print("💰 Hybrid Efficiency: Optimal speed + intelligence")
+    print("="*80)
