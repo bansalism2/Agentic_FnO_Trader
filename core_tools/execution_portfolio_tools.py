@@ -15,9 +15,26 @@ Author: AI Assistant
 import json
 import datetime as dt
 from typing import Dict, List, Optional, Any, Union
+import threading
+import time
+from enum import Enum
 
 # Global variable to hold connect_data_tools module
 connect_data_tools = None
+
+# Global lock for basket execution
+basket_execution_lock = threading.Lock()
+
+# Global failure tracking for circuit breaker
+execution_failures = []
+
+class OrderState(Enum):
+    PENDING = "pending"
+    PLACED = "placed"
+    PARTIAL = "partial"
+    COMPLETE = "complete"
+    CANCELLED = "cancelled"
+    FAILED = "failed"
 
 # Import connection tools (assumes file 1 is available)
 try:
@@ -102,96 +119,608 @@ except ImportError as e:
     connect_data_tools = None
 
 
-def execute_options_strategy(strategy_legs: List[Dict[str, Any]]) -> Dict[str, Any]:
+def optimize_execution_order(strategy_legs: List[Dict[str, Any]], order_type: str = "Opening") -> List[Dict[str, Any]]:
     """
-    Execute a multi-leg options strategy.
+    Optimize the execution order for multi-leg strategies.
+    
+    For Opening Positions:
+    - SELL first, then BUY (premium collection first)
+    - Lower strikes before higher strikes
+    - PE before CE (for same strike levels)
+    
+    For Closing Positions:
+    - BUY to close short positions first (risk elimination)
+    - SELL to close long positions second
+    
+    Args:
+        strategy_legs: List of strategy legs with order details
+        order_type: "Opening" or "Closing" (default: "Opening")
+    
+    Returns:
+        List of legs in optimized execution order
+    """
+    if not strategy_legs:
+        return strategy_legs
+    
+    # Determine if this is opening or closing positions based on order_type parameter
+    opening_positions = order_type.lower() == "opening"
+    
+    # Create a copy to avoid modifying original
+    legs_copy = [leg.copy() for leg in strategy_legs]
+    
+    if opening_positions:
+        # For opening positions: SELL first, then BUY
+        print(f"🔧 Optimizing for OPENING positions (SELL first, then BUY)")
+        
+        # Sort by action priority: SELL before BUY
+        def opening_sort_key(leg):
+            action = leg.get('action', '')
+            symbol = leg.get('symbol', '')
+            
+            # Primary: SELL before BUY
+            action_priority = 0 if action == 'SELL' else 1
+            
+            # Secondary: Extract strike price for ordering
+            strike = 0
+            try:
+                # Extract strike from symbol (e.g., "NIFTY2572424900PE" -> 24900)
+                if 'NIFTY' in symbol:
+                    # Find the strike price in the symbol
+                    import re
+                    strike_match = re.search(r'(\d{4,5})(PE|CE)$', symbol)
+                    if strike_match:
+                        strike = int(strike_match.group(1))
+            except:
+                pass
+            
+            # Tertiary: PE before CE (for same strike levels)
+            option_type_priority = 0 if symbol.endswith('PE') else 1
+            
+            return (action_priority, strike, option_type_priority)
+        
+        legs_copy.sort(key=opening_sort_key)
+        
+    else:
+        # For closing positions: BUY to close short positions first, then SELL to close long positions
+        print(f"🔧 Optimizing for CLOSING positions (BUY to close short first, then SELL to close long)")
+        
+        # Sort by action priority: BUY before SELL (for closing)
+        def closing_sort_key(leg):
+            action = leg.get('action', '')
+            symbol = leg.get('symbol', '')
+            
+            # Primary: BUY before SELL (for closing)
+            action_priority = 0 if action == 'BUY' else 1
+            
+            # Secondary: Extract strike price for ordering
+            strike = 0
+            try:
+                if 'NIFTY' in symbol:
+                    import re
+                    strike_match = re.search(r'(\d{4,5})(PE|CE)$', symbol)
+                    if strike_match:
+                        strike = int(strike_match.group(1))
+            except:
+                pass
+            
+            # Tertiary: PE before CE
+            option_type_priority = 0 if symbol.endswith('PE') else 1
+            
+            return (action_priority, strike, option_type_priority)
+        
+        legs_copy.sort(key=closing_sort_key)
+    
+    return legs_copy
+
+def wait_for_order_settlement(order_ids, max_wait_seconds=10):
+    """
+    Wait for orders to settle before status check with progressive delay
+    """
+    print(f"⏳ Waiting for {len(order_ids)} orders to settle (max {max_wait_seconds}s)...")
+    
+    for attempt in range(max_wait_seconds):
+        time.sleep(1)
+        all_settled = True
+        
+        for order_id in order_ids:
+            try:
+                status = get_order_status(order_id)
+                if status.get('status') == 'SUCCESS':
+                    order_status = status.get('order_status', 'UNKNOWN')
+                    if order_status in ['TRIGGER PENDING', 'VALIDATION PENDING', 'OPEN']:
+                        all_settled = False
+                        break
+            except Exception as e:
+                print(f"⚠️  Error checking order {order_id}: {str(e)}")
+                all_settled = False
+                break
+        
+        if all_settled:
+            print(f"✅ All orders settled after {attempt + 1} seconds")
+            return True
+    
+    print(f"⚠️  Orders may not be fully settled after {max_wait_seconds} seconds")
+    return False
+
+def handle_partial_fills(partially_filled_orders, strategy_legs):
+    """
+    Handle partial fills by adjusting remaining legs or closing positions
+    """
+    print(f"🔄 Handling {len(partially_filled_orders)} partial fills...")
+    
+    for partial_fill in partially_filled_orders:
+        filled_qty = partial_fill['filled_qty']
+        pending_qty = partial_fill['pending_qty']
+        order_info = partial_fill['order_info']
+        
+        print(f"📊 Partial fill: {order_info['symbol']} - Filled: {filled_qty}, Pending: {pending_qty}")
+        
+        # Option 1: Try to place order for remaining quantity
+        if pending_qty > 0:
+            try:
+                remaining_leg = {
+                    'symbol': order_info['symbol'],
+                    'action': order_info['action'],
+                    'quantity': pending_qty,
+                    'exchange': 'NFO',
+                    'product': 'MIS',
+                    'order_type': 'MARKET'
+                }
+                
+                print(f"🔄 Attempting to place remaining order for {pending_qty} lots...")
+                remaining_order_id = connect_data_tools._kite_instance.place_order(
+                    variety='regular',
+                    exchange='NFO',
+                    tradingsymbol=order_info['symbol'],
+                    transaction_type=order_info['action'],
+                    quantity=pending_qty,
+                    product='MIS',
+                    order_type='MARKET',
+                    validity='DAY'
+                )
+                
+                print(f"✅ Remaining order placed: {remaining_order_id}")
+                
+            except Exception as e:
+                print(f"❌ Failed to place remaining order: {str(e)}")
+                # Option 2: Close the partial position if we can't complete it
+                close_partial_position(partial_fill)
+
+def close_partial_position(partial_fill):
+    """
+    Close a partial position to prevent unbalanced strategy
+    """
+    order_info = partial_fill['order_info']
+    filled_qty = partial_fill['filled_qty']
+    
+    print(f"🚨 Closing partial position: {order_info['symbol']} x {filled_qty}")
+    
+    try:
+        # Determine closing action (opposite of opening action)
+        closing_action = 'SELL' if order_info['action'] == 'BUY' else 'BUY'
+        
+        close_order_id = connect_data_tools._kite_instance.place_order(
+            variety='regular',
+            exchange='NFO',
+            tradingsymbol=order_info['symbol'],
+            transaction_type=closing_action,
+            quantity=filled_qty,
+            product='MIS',
+            order_type='MARKET',
+            validity='DAY'
+        )
+        
+        print(f"✅ Partial position closed: {close_order_id}")
+        
+    except Exception as e:
+        print(f"❌ Failed to close partial position: {str(e)}")
+
+def robust_order_cancellation(order_ids):
+    """
+    Cancel orders with verification and retry logic
+    """
+    print(f"🔄 Robust cancellation for {len(order_ids)} orders...")
+    cancellation_results = {}
+    
+    # First pass: Rapid cancellation requests
+    for order_id in order_ids:
+        try:
+            cancel_result = cancel_order(order_id)
+            if cancel_result.get('status') == 'SUCCESS':
+                cancellation_results[order_id] = 'CANCEL_REQUESTED'
+                print(f"✅ Cancel requested for {order_id}")
+            else:
+                cancellation_results[order_id] = f'CANCEL_FAILED: {cancel_result.get("message")}'
+                print(f"❌ Cancel failed for {order_id}: {cancel_result.get('message')}")
+        except Exception as e:
+            cancellation_results[order_id] = f'CANCEL_FAILED: {str(e)}'
+            print(f"❌ Cancel error for {order_id}: {str(e)}")
+    
+    # Second pass: Verification with retry
+    time.sleep(2)  # Allow cancellations to process
+    
+    for order_id in order_ids:
+        if cancellation_results[order_id] == 'CANCEL_REQUESTED':
+            try:
+                status = get_order_status(order_id)
+                if status['status'] == 'SUCCESS':
+                    final_status = status['order_status']
+                    
+                    if final_status == 'CANCELLED':
+                        cancellation_results[order_id] = 'SUCCESSFULLY_CANCELLED'
+                        print(f"✅ {order_id} successfully cancelled")
+                    elif final_status == 'COMPLETE':
+                        cancellation_results[order_id] = 'EXECUTED_BEFORE_CANCEL'
+                        print(f"⚠️  {order_id} executed before cancellation")
+                    else:
+                        cancellation_results[order_id] = f'UNCERTAIN_STATUS: {final_status}'
+                        print(f"⚠️  {order_id} uncertain: {final_status}")
+                else:
+                    cancellation_results[order_id] = f'STATUS_CHECK_FAILED: {status.get("message")}'
+                    print(f"❌ {order_id} status check failed")
+                    
+            except Exception as e:
+                cancellation_results[order_id] = f'STATUS_CHECK_FAILED: {str(e)}'
+                print(f"❌ {order_id} status check error: {str(e)}")
+    
+    return cancellation_results
+
+def validate_basket_execution(strategy_legs):
+    """
+    Pre-execution validation for basket orders
+    """
+    print("🔍 Validating basket execution prerequisites...")
+    
+    # Check connection
+    if connect_data_tools is None:
+        return {'valid': False, 'message': 'Connection tools not available'}
+    
+    if not hasattr(connect_data_tools, '_kite_instance') or connect_data_tools._kite_instance is None:
+        return {'valid': False, 'message': 'Connection not initialized'}
+    
+    # Validate strategy legs
+    if not strategy_legs:
+        return {'valid': False, 'message': 'No strategy legs provided'}
+    
+    # Validate each leg
+    for i, leg in enumerate(strategy_legs):
+        required_fields = ['symbol', 'action', 'quantity']
+        if not all(field in leg for field in required_fields):
+            return {'valid': False, 'message': f'Leg {i+1} missing required fields: {required_fields}'}
+        
+        if leg['quantity'] <= 0:
+            return {'valid': False, 'message': f'Leg {i+1} has invalid quantity: {leg["quantity"]}'}
+    
+    # Check circuit breaker
+    circuit_breaker_result = circuit_breaker_check()
+    if not circuit_breaker_result['allow_execution']:
+        return {'valid': False, 'message': f'Circuit breaker: {circuit_breaker_result["reason"]}'}
+    
+    print("✅ Basket execution validation passed")
+    return {'valid': True, 'message': 'All validations passed'}
+
+def circuit_breaker_check():
+    """
+    Prevent execution if system is unstable
+    """
+    # Simple implementation - can be enhanced with actual failure tracking
+    try:
+        # Check if we can get account margins (basic connectivity test)
+        margins_result = get_account_margins()
+        if margins_result.get('status') != 'SUCCESS':
+            return {'allow_execution': False, 'reason': 'Cannot connect to broker'}
+        
+        return {'allow_execution': True, 'reason': 'System stable'}
+        
+    except Exception as e:
+        return {'allow_execution': False, 'reason': f'System error: {str(e)}'}
+
+def place_order_with_timeout(leg, timeout_seconds=5):
+    """
+    Place order with cross-platform timeout protection
+    """
+    result = {'order_id': None, 'error': None, 'completed': False}
+    
+    def place_order():
+        try:
+            order_params = {
+                'variety': 'regular',
+                'exchange': leg.get('exchange', 'NFO'),
+                'tradingsymbol': leg['symbol'],
+                'transaction_type': leg['action'],
+                'quantity': leg['quantity'],
+                'product': leg.get('product', 'MIS'),
+                'order_type': leg.get('order_type', 'MARKET'),
+                'validity': leg.get('validity', 'DAY')
+            }
+            
+            if leg.get('order_type') == 'LIMIT' and 'price' in leg:
+                order_params['price'] = leg['price']
+            
+            order_id = connect_data_tools._kite_instance.place_order(**order_params)
+            result['order_id'] = order_id
+            result['completed'] = True
+            
+        except Exception as e:
+            result['error'] = str(e)
+            result['completed'] = True
+    
+    # Start order placement in thread
+    thread = threading.Thread(target=place_order)
+    thread.start()
+    thread.join(timeout=timeout_seconds)
+    
+    if not result['completed']:
+        raise TimeoutError(f"Order placement timed out after {timeout_seconds} seconds")
+    
+    if result['error']:
+        raise Exception(result['error'])
+    
+    return result['order_id']
+
+def verify_basket_settlement(order_results, max_wait=15):
+    """
+    Verify all orders in basket have settled properly
+    """
+    print(f"⏳ Verifying basket settlement for {len(order_results)} orders...")
+    
+    settled_orders = []
+    failed_orders = []
+    partial_fills = []
+    
+    # Progressive waiting with exponential backoff
+    wait_intervals = [1, 2, 3, 5, 4]  # Total: 15 seconds
+    
+    for interval in wait_intervals:
+        time.sleep(interval)
+        
+        for order in order_results:
+            if order.get('status') != 'VERIFIED':
+                try:
+                    status_result = get_order_status(order['order_id'])
+                    
+                    if status_result['status'] == 'SUCCESS':
+                        order_status = status_result['order_status']
+                        filled_qty = status_result['filled_quantity']
+                        total_qty = status_result['quantity']
+                        
+                        if order_status == 'COMPLETE' and filled_qty == total_qty:
+                            order['status'] = 'VERIFIED'
+                            order['avg_price'] = status_result['average_price']
+                            settled_orders.append(order)
+                            print(f"✅ {order['symbol']} fully settled: {filled_qty} lots")
+                            
+                        elif order_status == 'COMPLETE' and filled_qty < total_qty:
+                            order['status'] = 'PARTIAL'
+                            order['filled_qty'] = filled_qty
+                            order['pending_qty'] = total_qty - filled_qty
+                            partial_fills.append(order)
+                            print(f"⚠️  {order['symbol']} partially filled: {filled_qty}/{total_qty}")
+                            
+                        elif order_status in ['CANCELLED', 'REJECTED']:
+                            order['status'] = 'FAILED'
+                            failed_orders.append(order)
+                            print(f"❌ {order['symbol']} failed: {order_status}")
+                            
+                        elif order_status in ['OPEN', 'TRIGGER PENDING']:
+                            print(f"⏳ {order['symbol']} still pending: {order_status}")
+                            
+                except Exception as e:
+                    print(f"❌ Error checking {order['symbol']}: {str(e)}")
+                    if interval == wait_intervals[-1]:  # Last interval
+                        order['status'] = 'FAILED'
+                        failed_orders.append(order)
+    
+    success_rate = len(settled_orders) / len(order_results) if order_results else 0
+    
+    print(f"📊 Settlement Summary: {len(settled_orders)} settled, {len(failed_orders)} failed, {len(partial_fills)} partial")
+    
+    return {
+        'all_successful': len(failed_orders) == 0 and len(partial_fills) == 0,
+        'settled_orders': settled_orders,
+        'failed_orders': failed_orders,
+        'partial_fills': partial_fills,
+        'success_rate': success_rate
+    }
+
+def emergency_cancel_all(order_ids):
+    """
+    Emergency cancellation with aggressive retry and immediate verification
+    """
+    print(f"🚨 EMERGENCY CANCELLATION: {len(order_ids)} orders")
+    cancellation_results = {}
+    
+    # First pass: Rapid cancellation requests
+    for order_id in order_ids:
+        try:
+            cancel_order(order_id, variety='regular')
+            cancellation_results[order_id] = 'CANCEL_REQUESTED'
+            print(f"🔄 Cancel requested: {order_id}")
+        except Exception as e:
+            cancellation_results[order_id] = f'CANCEL_FAILED: {str(e)}'
+            print(f"❌ Cancel failed: {order_id} - {str(e)}")
+    
+    # Second pass: Verification with retry
+    time.sleep(2)  # Allow cancellations to process
+    
+    for order_id in order_ids:
+        if cancellation_results[order_id] == 'CANCEL_REQUESTED':
+            try:
+                status = get_order_status(order_id)
+                if status['status'] == 'SUCCESS':
+                    final_status = status['order_status']
+                    
+                    if final_status == 'CANCELLED':
+                        cancellation_results[order_id] = 'SUCCESSFULLY_CANCELLED'
+                        print(f"✅ {order_id} successfully cancelled")
+                    elif final_status == 'COMPLETE':
+                        cancellation_results[order_id] = 'EXECUTED_BEFORE_CANCEL'
+                        print(f"⚠️  {order_id} executed before cancellation")
+                    else:
+                        cancellation_results[order_id] = f'UNCERTAIN_STATUS: {final_status}'
+                        print(f"⚠️  {order_id} uncertain: {final_status}")
+                else:
+                    cancellation_results[order_id] = f'STATUS_CHECK_FAILED: {status.get("message")}'
+                    print(f"❌ {order_id} status check failed")
+                    
+            except Exception as e:
+                cancellation_results[order_id] = f'STATUS_CHECK_FAILED: {str(e)}'
+                print(f"❌ {order_id} status check error: {str(e)}')
+    
+    return cancellation_results
+
+def handle_mixed_basket_results(order_results, settlement_result):
+    """
+    Handle mixed results (some successful, some failed)
+    """
+    print("🔄 Handling mixed basket results...")
+    
+    settled_count = len(settlement_result['settled_orders'])
+    failed_count = len(settlement_result['failed_orders'])
+    partial_count = len(settlement_result['partial_fills'])
+    
+    # If we have partial fills, try to handle them
+    if partial_count > 0:
+        print(f"🔄 Processing {partial_count} partial fills...")
+        handle_partial_fills(settlement_result['partial_fills'], [])
+    
+    # If we have failed orders, we need to close successful ones
+    if failed_count > 0 and settled_count > 0:
+        print(f"🚨 {failed_count} orders failed, closing {settled_count} successful orders...")
+        
+        # Close all successful orders to prevent unbalanced positions
+        for settled_order in settlement_result['settled_orders']:
+            try:
+                closing_action = 'SELL' if settled_order['action'] == 'BUY' else 'BUY'
+                
+                close_order_id = connect_data_tools._kite_instance.place_order(
+                    variety='regular',
+                    exchange='NFO',
+                    tradingsymbol=settled_order['symbol'],
+                    transaction_type=closing_action,
+                    quantity=settled_order['quantity'],
+                    product='MIS',
+                    order_type='MARKET',
+                    validity='DAY'
+                )
+                
+                print(f"✅ Closed {settled_order['symbol']}: {close_order_id}")
+                
+            except Exception as e:
+                print(f"❌ Failed to close {settled_order['symbol']}: {str(e)}")
+    
+    return {
+        'status': 'MIXED_BASKET_RESULTS',
+        'settled_orders': settled_count,
+        'failed_orders': failed_count,
+        'partial_fills': partial_count,
+        'success_rate': settlement_result['success_rate'],
+        'message': f'Mixed results: {settled_count} settled, {failed_count} failed, {partial_count} partial'
+    }
+
+def execute_options_strategy(strategy_legs: List[Dict[str, Any]], order_type: str = "Opening") -> Dict[str, Any]:
+    """
+    Execute a multi-leg options strategy with improved basket order handling.
     
     Args:
         strategy_legs: List of legs with symbol, action, quantity, etc.
+        order_type: "Opening" or "Closing" (default: "Opening")
     
     Returns:
         Dict with execution results for each leg
     """
-    try:
-        if connect_data_tools is None:
-            return {'status': 'ERROR', 'message': 'Connection tools not available'}
-        
-        if not hasattr(connect_data_tools, '_kite_instance') or connect_data_tools._kite_instance is None:
-            return {'status': 'ERROR', 'message': 'Connection not initialized'}
-        
-        if not strategy_legs:
-            return {'status': 'ERROR', 'message': 'No strategy legs provided'}
-        
-        execution_results = []
-        successful_orders = 0
-        
-        for i, leg in enumerate(strategy_legs):
-            try:
-                # Validate leg data
-                required_fields = ['symbol', 'action', 'quantity']
-                if not all(field in leg for field in required_fields):
-                    execution_results.append({
-                        'leg_number': i + 1,
-                        'symbol': leg.get('symbol', 'Unknown'),
-                        'status': 'FAILED',
-                        'message': 'Missing required fields',
-                        'order_id': None
-                    })
-                    continue
-                
-                # Place order
-                order_params = {
-                    'variety': 'regular',
-                    'exchange': leg.get('exchange', 'NFO'),
-                    'tradingsymbol': leg['symbol'],
-                    'transaction_type': leg['action'],
-                    'quantity': leg['quantity'],
-                    'product': leg.get('product', 'MIS'),  # Default to MIS (intraday)
-                    'order_type': leg.get('order_type', 'MARKET'),
-                    'validity': leg.get('validity', 'DAY')
+    execution_start = time.time()
+    
+    # Use global lock to ensure only one basket executes at a time
+    with basket_execution_lock:
+        try:
+            # Phase 1: Pre-execution validation
+            print("🔍 PHASE 1: Pre-execution validation...")
+            
+            validation_result = validate_basket_execution(strategy_legs)
+            if not validation_result['valid']:
+                return {
+                    'status': 'VALIDATION_FAILED',
+                    'message': validation_result['message'],
+                    'execution_time': time.time() - execution_start
                 }
+            
+            # Phase 2: Rapid order placement
+            print("🚀 PHASE 2: Rapid order placement...")
+            
+            optimized_legs = optimize_execution_order(strategy_legs, order_type=order_type)
+            print(f"📋 Optimized execution order:")
+            for i, leg in enumerate(optimized_legs, 1):
+                print(f"   {i}. {leg['action']} {leg['symbol']} x {leg['quantity']}")
+            
+            order_results = []
+            
+            for i, leg in enumerate(optimized_legs):
+                try:
+                    # Place order with timeout protection
+                    order_id = place_order_with_timeout(leg, timeout_seconds=5)
+                    
+                    order_results.append({
+                        'leg_number': i + 1,
+                        'order_id': order_id,
+                        'symbol': leg['symbol'],
+                        'action': leg['action'],
+                        'quantity': leg['quantity'],
+                        'placement_time': time.time() - execution_start,
+                        'status': 'PLACED'
+                    })
+                    
+                    print(f"✅ Leg {i+1}/{len(optimized_legs)}: {order_id}")
+                    
+                except Exception as e:
+                    print(f"❌ Leg {i+1} FAILED: {str(e)}")
+                    
+                    # Immediate rollback - cancel all previous orders
+                    if order_results:
+                        print("🔄 IMMEDIATE ROLLBACK: Cancelling all placed orders...")
+                        emergency_cancellation_results = emergency_cancel_all(
+                            [r['order_id'] for r in order_results]
+                        )
+                        
+                        return {
+                            'status': 'BASKET_ROLLBACK_IMMEDIATE',
+                            'failed_leg': i + 1,
+                            'placed_orders': len(order_results),
+                            'cancellation_results': emergency_cancellation_results,
+                            'execution_time': time.time() - execution_start,
+                            'message': f'Leg {i+1} failed, all {len(order_results)} orders cancelled'
+                        }
+                    else:
+                        return {
+                            'status': 'FIRST_LEG_FAILED',
+                            'message': f'First leg failed: {str(e)}',
+                            'execution_time': time.time() - execution_start
+                        }
+            
+            # Phase 3: Settlement verification
+            print("⏳ PHASE 3: Settlement verification...")
+            
+            settlement_result = verify_basket_settlement(order_results, max_wait=15)
+            
+            if settlement_result['all_successful']:
+                return {
+                    'status': 'BASKET_SUCCESS',
+                    'total_legs': len(strategy_legs),
+                    'execution_time': time.time() - execution_start,
+                    'order_results': order_results,
+                    'settlement_details': settlement_result,
+                    'message': f'All {len(strategy_legs)} legs executed successfully'
+                }
+            else:
+                # Handle mixed results (some successful, some failed)
+                return handle_mixed_basket_results(order_results, settlement_result)
                 
-                # Add price for limit orders
-                if leg.get('order_type') == 'LIMIT' and 'price' in leg:
-                    order_params['price'] = leg['price']
-                
-                order_id = connect_data_tools._kite_instance.place_order(**order_params)
-                
-                execution_results.append({
-                    'leg_number': i + 1,
-                    'symbol': leg['symbol'],
-                    'action': leg['action'],
-                    'quantity': leg['quantity'],
-                    'status': 'SUCCESS',
-                    'message': 'Order placed successfully',
-                    'order_id': order_id
-                })
-                
-                successful_orders += 1
-                
-            except Exception as e:
-                execution_results.append({
-                    'leg_number': i + 1,
-                    'symbol': leg.get('symbol', 'Unknown'),
-                    'status': 'FAILED',
-                    'message': f'Order placement failed: {str(e)}',
-                    'order_id': None
-                })
-        
-        return {
-            'status': 'SUCCESS' if successful_orders > 0 else 'FAILED',
-            'total_legs': len(strategy_legs),
-            'successful_orders': successful_orders,
-            'failed_orders': len(strategy_legs) - successful_orders,
-            'execution_results': execution_results,
-            'timestamp': dt.datetime.now().isoformat()
-        }
-        
-    except Exception as e:
-        return {
-            'status': 'ERROR',
-            'message': f'Strategy execution failed: {str(e)}'
-        }
+        except Exception as e:
+            return {
+                'status': 'BASKET_EXECUTION_ERROR',
+                'message': f'Basket execution error: {str(e)}',
+                'execution_time': time.time() - execution_start
+            }
 
 
 def get_order_status(order_id: str) -> Dict[str, Any]:
@@ -807,7 +1336,7 @@ def get_risk_metrics() -> Dict[str, Any]:
         }
 
 
-def execute_and_store_strategy(strategy_legs: List[Dict[str, Any]], trade_metadata: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+def execute_and_store_strategy(strategy_legs: List[Dict[str, Any]], trade_metadata: Optional[Dict[str, Any]] = None, order_type: str = "Opening") -> Dict[str, Any]:
     """
     Execute a strategy and store it in trade storage ONLY if execution is successful.
     
@@ -815,7 +1344,8 @@ def execute_and_store_strategy(strategy_legs: List[Dict[str, Any]], trade_metada
         strategy_legs: List of strategy legs with order details
         trade_metadata: Additional trade information (analysis data, risk management, etc.)
                        Can also be a strategy creation result dict with 'legs' key
-    
+
+
     Returns:
         Dict with execution result and storage status
     """
@@ -841,10 +1371,89 @@ def execute_and_store_strategy(strategy_legs: List[Dict[str, Any]], trade_metada
             # Use provided trade_metadata as is
             strategy_metadata = trade_metadata or {}
         
-        # First execute the strategy
-        execution_result = execute_options_strategy(strategy_legs)
+        # CRITICAL: Validate margin requirements BEFORE executing any orders
+        print("🔍 PRE-EXECUTION MARGIN VALIDATION...")
         
-        if execution_result.get('status') != 'SUCCESS':
+        # Use the existing calculate_strategy_margins function
+        margin_result = calculate_strategy_margins(strategy_legs)
+        
+        if margin_result.get('status') != 'SUCCESS':
+            return {
+                'status': 'MARGIN_CALCULATION_FAILED',
+                'execution_result': None,
+                'storage_result': None,
+                'message': f'Margin calculation failed: {margin_result.get("message", "Unknown error")}'
+            }
+        
+        # Get account margins to compare
+        account_margins = get_account_margins()
+        if account_margins.get('status') != 'SUCCESS':
+            return {
+                'status': 'ACCOUNT_MARGINS_FAILED',
+                'execution_result': None,
+                'storage_result': None,
+                'message': f'Could not fetch account margins: {account_margins.get("message", "Unknown error")}'
+            }
+        
+        required_margin = margin_result.get('total_margin_required', 0)
+        available_cash = account_margins['equity'].get('available_cash', 0)
+        live_balance = account_margins['equity'].get('live_balance', 0)
+        intraday_payin = account_margins['equity'].get('intraday_payin', 0)
+        
+        # Use conservative approach: take the lower of available_cash or live_balance
+        # This accounts for unrealized P&L that might not be reflected in available_cash
+        effective_available_cash = min(available_cash, live_balance) + intraday_payin
+        
+        # Add 20% safety buffer
+        total_required = required_margin * 1.20
+        
+        print(f"💰 MARGIN ANALYSIS:")
+        print(f"   Required Margin: ₹{required_margin:.2f}")
+        print(f"   With Safety Buffer: ₹{total_required:.2f}")
+        print(f"   Available Cash: ₹{available_cash:.2f}")
+        print(f"   Live Balance: ₹{live_balance:.2f}")
+        print(f"   Intraday Payin: ₹{intraday_payin:.2f}")
+        print(f"   Effective Available (Conservative): ₹{effective_available_cash:.2f}")
+        print(f"   Unrealized P&L: ₹{account_margins['equity'].get('unrealized_pnl', 0):.2f}")
+        
+        # Check if we have sufficient margin
+        if total_required > effective_available_cash:
+            return {
+                'status': 'INSUFFICIENT_MARGIN',
+                'execution_result': None,
+                'storage_result': None,
+                'margin_result': margin_result,
+                'account_margins': account_margins,
+                'message': f'Insufficient margin for strategy execution. Required: ₹{total_required:.2f}, Available: ₹{effective_available_cash:.2f}'
+            }
+        
+        # CRITICAL: Check if we have sufficient margin for ALL legs
+        if len(strategy_legs) > 1:
+            print(f"🔍 VALIDATING MULTI-LEG STRATEGY ({len(strategy_legs)} legs)...")
+            
+            # Calculate individual leg margins to ensure we can execute all legs
+            individual_margins = margin_result.get('individual_margins', [])
+            if individual_margins:
+                total_individual_margin = sum(leg.get('margin', 0) for leg in individual_margins)
+                print(f"   Total Individual Margins: ₹{total_individual_margin:.2f}")
+                
+                # Ensure we have margin for worst-case scenario (all legs executed)
+                if total_individual_margin > effective_available_cash:
+                    return {
+                        'status': 'INSUFFICIENT_MARGIN_FOR_ALL_LEGS',
+                        'execution_result': None,
+                        'storage_result': None,
+                        'margin_result': margin_result,
+                        'account_margins': account_margins,
+                        'message': f'Insufficient margin for all {len(strategy_legs)} legs. Required: ₹{total_individual_margin:.2f}, Available: ₹{effective_available_cash:.2f}'
+                    }
+        
+        print("✅ ALL MARGIN CHECKS PASSED - PROCEEDING WITH EXECUTION...")
+        
+        # First execute the strategy
+        execution_result = execute_options_strategy(strategy_legs, order_type=order_type)
+        
+        if execution_result.get('status') not in ['SUCCESS', 'PARTIAL_SUCCESS']:
             return {
                 'status': 'EXECUTION_FAILED',
                 'execution_result': execution_result,
@@ -854,7 +1463,11 @@ def execute_and_store_strategy(strategy_legs: List[Dict[str, Any]], trade_metada
         
         # If execution successful, store the trade
         try:
-            from trade_storage import write_successful_trade
+            # Handle different import contexts
+            try:
+                from trade_storage import write_successful_trade
+            except ImportError:
+                from core_tools.trade_storage import write_successful_trade
             
             # Prepare trade data for storage
             trade_data = {
