@@ -51,6 +51,7 @@ class SimplePositionManager:
         self.DEFAULT_COOL_OFF_MINUTES = 10
         self.DEFAULT_MAX_HOLD_TIME_MINUTES = 30
         self.DEFAULT_MIN_HOLD_TIME_MINUTES = 3  # Minimum 3 minutes unless extreme loss
+        self.INTENDED_TRADE_CHECK_MINUTES = 7  # Only consider intended trades from last 7 minutes
 
     def get_trade_parameters(self, trade_id):
         """Get trade-specific parameters from active_trades.json"""
@@ -433,14 +434,19 @@ def get_recent_intended_trades(symbol: str = None, minutes_back: int = 30) -> Li
         print(f"⚠️ Failed to read intended trades: {e}")
         return []
 
-def should_avoid_exit_due_to_intended_trade(symbol: str, action: str) -> bool:
+def should_avoid_exit_due_to_intended_trade(symbol: str, action: str, minutes_back: int = 7) -> bool:
     """
     Check if we should avoid exiting a position because opportunity hunter wants it.
     Returns True if we should avoid exit, False if we should proceed with exit.
+    
+    Args:
+        symbol: The symbol to check
+        action: The action type (LONG_CALL, LONG_PUT, etc.)
+        minutes_back: Time window to check for intended trades (default: 7 minutes)
     """
     try:
         # Get recent intended trades for this symbol
-        recent_intended = get_recent_intended_trades(symbol, minutes_back=15)  # Last 15 minutes
+        recent_intended = get_recent_intended_trades(symbol, minutes_back=minutes_back)
         
         if not recent_intended:
             return False  # No recent intended trades, safe to exit
@@ -455,7 +461,7 @@ def should_avoid_exit_due_to_intended_trade(symbol: str, action: str) -> bool:
         
         # If opportunity hunter's MOST RECENT intended trade matches our position, avoid exit
         if intended_symbol == symbol and intended_action == action:
-            print(f"🤔 Avoiding exit on {symbol} - Opportunity hunter's MOST RECENT intended trade was {action}")
+            print(f"🤔 Avoiding exit on {symbol} - Opportunity hunter's MOST RECENT intended trade was {action} (within {minutes_back} minutes)")
             return True
         
         return False
