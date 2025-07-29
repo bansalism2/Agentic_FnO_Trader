@@ -569,6 +569,13 @@ def main(force_run=False):
         # Main loop
         while True:
             try:
+                # Check if market has closed (after 3:30 PM)
+                current_time = datetime.now(IST_TIMEZONE).time()
+                if current_time >= dt_time(15, 30):  # 3:30 PM or later
+                    logger.info("Market has closed (3:30 PM). Stopping crew driver...")
+                    logger.info("All positions should have been squared off by 3:20 PM")
+                    break
+                
                 # Run scheduled tasks
                 schedule.run_pending()
                 
@@ -630,12 +637,3 @@ if __name__ == "__main__":
         run_single_execution(force_run=force_run)
     else:
         main(force_run=force_run) 
-
-    # Persistent event loop for schedule
-    try:
-        while True:
-            schedule.run_pending()
-            time.sleep(1)
-    except KeyboardInterrupt:
-        logger.info("Received interrupt signal. Shutting down...")
-        logger.info("Hybrid advanced crew driver stopped successfully") 
