@@ -445,15 +445,18 @@ def should_avoid_exit_due_to_intended_trade(symbol: str, action: str) -> bool:
         if not recent_intended:
             return False  # No recent intended trades, safe to exit
         
-        # Check if any recent intended trade matches our position
-        for intended in recent_intended:
-            intended_action = intended.get('action', '')
-            intended_symbol = intended.get('symbol', '')
-            
-            # If opportunity hunter wanted this exact position recently, avoid exit
-            if intended_symbol == symbol and intended_action == action:
-                print(f"🤔 Avoiding exit on {symbol} - Opportunity hunter wanted {action} recently")
-                return True
+        # Sort by timestamp to get the most recent one first
+        recent_intended.sort(key=lambda x: x.get('timestamp', ''), reverse=True)
+        
+        # Check only the MOST RECENT intended trade
+        most_recent = recent_intended[0]
+        intended_action = most_recent.get('action', '')
+        intended_symbol = most_recent.get('symbol', '')
+        
+        # If opportunity hunter's MOST RECENT intended trade matches our position, avoid exit
+        if intended_symbol == symbol and intended_action == action:
+            print(f"🤔 Avoiding exit on {symbol} - Opportunity hunter's MOST RECENT intended trade was {action}")
+            return True
         
         return False
         
