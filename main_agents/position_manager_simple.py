@@ -119,14 +119,10 @@ class SimplePositionManager:
     def evaluate_position(self, pos, now):
         symbol = pos.get('symbol')
         quantity = pos.get('quantity')
-        avg_price = pos.get('average_price')
         last_price = pos.get('last_price')
-        pnl = (last_price - avg_price) * quantity
-        initial_investment = avg_price * abs(quantity)
-        pnl_percentage = (pnl / initial_investment) * 100 if initial_investment > 0 else 0
         trade_id = self.find_trade_id_for_symbol(symbol)
         
-        # Get trade-specific parameters
+        # Get trade-specific parameters and actual entry price from trade storage
         trade_params = self.get_trade_parameters(trade_id)
         stop_loss_pct = trade_params['stop_loss_pct']
         profit_target_pct = trade_params['profit_target_pct']
@@ -134,8 +130,28 @@ class SimplePositionManager:
         min_hold_time_minutes = trade_params['min_hold_time_minutes']
         trade_data = trade_params.get('trade_data')
         
+        # Use actual entry price from trade storage instead of broker API
+        actual_entry_price = None
+        if trade_data and trade_data.get('execution_details', {}).get('settlement_details', {}).get('settled_orders'):
+            try:
+                actual_entry_price = float(trade_data['execution_details']['settlement_details']['settled_orders'][0]['avg_price'])
+                print(f"    📊 Using actual entry price from trade storage: ₹{actual_entry_price}")
+            except (KeyError, ValueError, IndexError) as e:
+                print(f"    ⚠️  Error getting actual entry price: {e}")
+        
+        # Fallback to broker API data if trade storage data not available
+        if actual_entry_price is None:
+            actual_entry_price = pos.get('average_price')
+            print(f"    ⚠️  Using broker API entry price (may be stale): ₹{actual_entry_price}")
+        
+        # Calculate P&L using actual entry price
+        pnl = (last_price - actual_entry_price) * quantity
+        initial_investment = actual_entry_price * abs(quantity)
+        pnl_percentage = (pnl / initial_investment) * 100 if initial_investment > 0 else 0
+        
         print(f"  - Evaluating {symbol} (Qty: {quantity}): P&L: {pnl_percentage:.2f}% | Absolute P&L: ₹{pnl:.2f}")
         print(f"    📊 Trade Parameters: Stop Loss: {abs(stop_loss_pct)}%, Profit Target: {profit_target_pct}%, Max Hold: {max_hold_time_minutes}min, Min Hold: {min_hold_time_minutes}min")
+        print(f"    💰 Entry Price: ₹{actual_entry_price} | Current Price: ₹{last_price} | P&L: ₹{pnl:.2f}")
         
         # Get actual entry time from trade storage
         entry_time = None
