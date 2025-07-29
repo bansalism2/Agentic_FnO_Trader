@@ -672,26 +672,41 @@ def trend_following_signal(history, lookback=4):
     adx_vals = [h.get('adx', 0) for h in history[-lookback:]]
     print(f"[DEBUG] RSI values (last {lookback}): {rsi_vals}")
     print(f"[DEBUG] ADX values (last {lookback}): {adx_vals}")
-    # Momentum override
+    
+    # Get current market regime
+    current_regime = history[-1].get('market_regime', 'UNKNOWN')
+    print(f"[DEBUG] Current market regime: {current_regime}")
+    
+    # Momentum override (extreme conditions)
     if rsi_vals[-1] < 25:
         print(f"[Momentum Override] RSI={rsi_vals[-1]:.2f} < 25: Triggering LONG signal.")
         return "LONG"
     if rsi_vals[-1] > 75:
         print(f"[Momentum Override] RSI={rsi_vals[-1]:.2f} > 75: Triggering SHORT signal.")
         return "SHORT"
+    
+    # Regime-based execution (NEW - captures obvious opportunities)
+    if current_regime == "LONG_OPTION" and adx_vals[-1] > 35:
+        if 40 <= rsi_vals[-1] <= 60:  # Neutral but favorable zone
+            print(f"[Regime-Based] LONG_OPTION regime + ADX={adx_vals[-1]:.2f} + RSI={rsi_vals[-1]:.2f}: Triggering LONG signal.")
+            return "LONG"
+    
     # Helper: count rising/flat and falling/flat bars
     def count_rising_or_flat(vals):
         return sum(vals[i] >= vals[i-1] for i in range(1, lookback))
     def count_falling_or_flat(vals):
         return sum(vals[i] <= vals[i-1] for i in range(1, lookback))
+    
     # LONG: RSI > 60 for all bars, at least 2/3 rising/flat; ADX > 20 for all, at least 2/3 rising/flat
     if all(r > 60 for r in rsi_vals) and all(a > 20 for a in adx_vals):
         if count_rising_or_flat(rsi_vals) >= 2 and count_rising_or_flat(adx_vals) >= 2:
             return "LONG"
+    
     # SHORT: RSI < 40 for all bars, at least 2/3 falling/flat; ADX > 20 for all, at least 2/3 rising/flat
     if all(r < 40 for r in rsi_vals) and all(a > 20 for a in adx_vals):
         if count_falling_or_flat(rsi_vals) >= 2 and count_rising_or_flat(adx_vals) >= 2:
             return "SHORT"
+    
     return "WAIT"
 
 def volatility_regime_switch_signal(history):
