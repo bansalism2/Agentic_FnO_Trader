@@ -116,11 +116,42 @@ class SimplePositionManager:
         print("="*80)
         return {'status': 'SUCCESS', 'decision': 'MANAGEMENT_CYCLE_COMPLETE'}
 
+    def get_live_market_price(self, symbol):
+        """Get live market price for a symbol"""
+        try:
+            from core_tools.execution_portfolio_tools import ensure_connection_initialized
+            from core_tools.connect_data_tools import _kite_instance
+            
+            # Ensure connection is initialized
+            ensure_connection_initialized()
+            
+            # Use existing kite instance
+            if _kite_instance is None:
+                print(f"    ⚠️  No active connection for {symbol}")
+                return None
+            
+            # Get live quote using existing connection
+            quote = _kite_instance.quote(f'NFO:{symbol}')
+            live_price = quote[f'NFO:{symbol}']['last_price']
+            
+            return live_price
+            
+        except Exception as e:
+            print(f"    ⚠️  Error getting live price for {symbol}: {e}")
+            return None
+
     def evaluate_position(self, pos, now):
         symbol = pos.get('symbol')
         quantity = pos.get('quantity')
-        last_price = pos.get('last_price')
         trade_id = self.find_trade_id_for_symbol(symbol)
+        
+        # Get live market price instead of stale broker API data
+        live_price = self.get_live_market_price(symbol)
+        if live_price is None:
+            print(f"    ⚠️  Could not get live price for {symbol}, using broker API data")
+            live_price = pos.get('last_price')
+        else:
+            print(f"    📊 Live market price for {symbol}: ₹{live_price}")
         
         # Get trade-specific parameters and actual entry price from trade storage
         trade_params = self.get_trade_parameters(trade_id)
@@ -144,14 +175,14 @@ class SimplePositionManager:
             actual_entry_price = pos.get('average_price')
             print(f"    ⚠️  Using broker API entry price (may be stale): ₹{actual_entry_price}")
         
-        # Calculate P&L using actual entry price
-        pnl = (last_price - actual_entry_price) * quantity
+        # Calculate P&L using actual entry price and live market price
+        pnl = (live_price - actual_entry_price) * quantity
         initial_investment = actual_entry_price * abs(quantity)
         pnl_percentage = (pnl / initial_investment) * 100 if initial_investment > 0 else 0
         
         print(f"  - Evaluating {symbol} (Qty: {quantity}): P&L: {pnl_percentage:.2f}% | Absolute P&L: ₹{pnl:.2f}")
         print(f"    📊 Trade Parameters: Stop Loss: {abs(stop_loss_pct)}%, Profit Target: {profit_target_pct}%, Max Hold: {max_hold_time_minutes}min, Min Hold: {min_hold_time_minutes}min")
-        print(f"    💰 Entry Price: ₹{actual_entry_price} | Current Price: ₹{last_price} | P&L: ₹{pnl:.2f}")
+        print(f"    💰 Entry Price: ₹{actual_entry_price} | Live Price: ₹{live_price} | P&L: ₹{pnl:.2f}")
         
         # Get actual entry time from trade storage
         entry_time = None
