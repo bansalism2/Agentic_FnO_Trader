@@ -738,6 +738,17 @@ def run_hybrid_scalping_opportunity_hunter() -> Dict[str, Any]:
     """
     Main entry for the hybrid scalping opportunity hunter.
     """
+    # TIME CHECK: No trades after 3:00 PM
+    current_time = datetime.now().time()
+    if current_time.hour >= 15:  # 3:00 PM or later
+        print("⏰ Market closing time reached (3:00 PM). No new trades allowed.")
+        return {
+            'status': 'TIME_RESTRICTED',
+            'decision': 'WAIT',
+            'reason': 'Trading stopped after 3:00 PM for risk management.',
+            'timestamp': datetime.now().isoformat()
+        }
+    
     # CRITICAL SAFETY CHECK: First, check if a position is already open.
     try:
         positions_result = get_portfolio_positions()
