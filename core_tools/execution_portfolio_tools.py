@@ -88,7 +88,9 @@ try:
                     "access_token.txt",  # Current directory
                     "../data/access_token.txt",  # Relative to agent_tools
                     "../../data/access_token.txt",  # Relative to core_tools
-                    "./data/access_token.txt"  # Alternative relative path
+                    "./data/access_token.txt",  # Alternative relative path
+                    "../../agent_tools/data/access_token.txt",  # Correct path from main_agents
+                    "../../../agent_tools/data/access_token.txt"  # Alternative correct path
                 ]
                 
                 access_token = None
@@ -565,7 +567,7 @@ def emergency_cancel_all(order_ids):
                     
             except Exception as e:
                 cancellation_results[order_id] = f'STATUS_CHECK_FAILED: {str(e)}'
-                print(f"❌ {order_id} status check error: {str(e)}')
+                print(f"❌ {order_id} status check error: {str(e)}")
     
     return cancellation_results
 
@@ -828,7 +830,10 @@ def get_portfolio_positions() -> Dict[str, Any]:
             return {'status': 'ERROR', 'message': 'Connection tools not available'}
         
         if not hasattr(connect_data_tools, '_kite_instance') or connect_data_tools._kite_instance is None:
-            return {'status': 'ERROR', 'message': 'Connection not initialized'}
+            # Try to initialize connection
+            init_result = ensure_connection_initialized()
+            if init_result.get('status') != 'SUCCESS':
+                return {'status': 'ERROR', 'message': f'Connection initialization failed: {init_result.get("message")}'}
         
         positions = connect_data_tools._kite_instance.positions()
         
@@ -916,7 +921,10 @@ def get_account_margins() -> Dict[str, Any]:
             return {'status': 'ERROR', 'message': 'Connection tools not available'}
         
         if not hasattr(connect_data_tools, '_kite_instance') or connect_data_tools._kite_instance is None:
-            return {'status': 'ERROR', 'message': 'Connection not initialized'}
+            # Try to initialize connection
+            init_result = ensure_connection_initialized()
+            if init_result.get('status') != 'SUCCESS':
+                return {'status': 'ERROR', 'message': f'Connection initialization failed: {init_result.get("message")}'}
         
         margins = connect_data_tools._kite_instance.margins()
         equity_margins = margins.get('equity', {})
@@ -1453,7 +1461,7 @@ def execute_and_store_strategy(strategy_legs: List[Dict[str, Any]], trade_metada
         # First execute the strategy
         execution_result = execute_options_strategy(strategy_legs, order_type=order_type)
         
-        if execution_result.get('status') not in ['SUCCESS', 'PARTIAL_SUCCESS']:
+        if execution_result.get('status') not in ['SUCCESS', 'PARTIAL_SUCCESS', 'BASKET_SUCCESS']:
             return {
                 'status': 'EXECUTION_FAILED',
                 'execution_result': execution_result,
@@ -1463,11 +1471,8 @@ def execute_and_store_strategy(strategy_legs: List[Dict[str, Any]], trade_metada
         
         # If execution successful, store the trade
         try:
-            # Handle different import contexts
-            try:
-                from trade_storage import write_successful_trade
-            except ImportError:
-                from core_tools.trade_storage import write_successful_trade
+            # Import write_successful_trade from the same directory
+            from trade_storage import write_successful_trade
             
             # Prepare trade data for storage
             trade_data = {
@@ -1997,7 +2002,9 @@ if __name__ == "__main__":
         "access_token.txt",  # Current directory
         "../data/access_token.txt",  # Relative to agent_tools
         "../../data/access_token.txt",  # Relative to core_tools
-        "./data/access_token.txt"  # Alternative relative path
+        "./data/access_token.txt",  # Alternative relative path
+        "../../agent_tools/data/access_token.txt",  # Correct path from main_agents
+        "../../../agent_tools/data/access_token.txt"  # Alternative correct path
     ]
     
     access_token = None
@@ -2033,3 +2040,124 @@ if __name__ == "__main__":
     print(get_daily_trading_summary())
     print("\n--- Risk Metrics ---")
     print(get_risk_metrics())
+
+
+def ensure_connection_initialized():
+    """Ensure the Kite connection is initialized before making API calls."""
+    global connect_data_tools
+    
+    if connect_data_tools is None:
+        return {'status': 'ERROR', 'message': 'Connection tools not available'}
+    
+    if not hasattr(connect_data_tools, '_kite_instance') or connect_data_tools._kite_instance is None:
+        # Try to initialize connection
+        try:
+            from dotenv import load_dotenv
+            import os
+            
+            # Load environment variables - try multiple paths
+            env_paths = ['./.env', '../.env', '../../.env', '../../agent_tools/.env']
+            env_loaded = False
+            for env_path in env_paths:
+                try:
+                    if os.path.exists(env_path):
+                        load_dotenv(dotenv_path=env_path, override=True)
+                        print(f"✅ Loaded .env from: {env_path}")
+                        env_loaded = True
+                        break
+                except Exception as e:
+                    print(f"❌ Failed to load {env_path}: {e}")
+                    continue
+            
+            if not env_loaded:
+                return {'status': 'ERROR', 'message': 'Could not load environment variables'}
+            
+            api_key = os.getenv("kite_api_key")
+            api_secret = os.getenv("kite_api_secret")
+            
+            print(f"🔑 API Key found: {api_key[:10] if api_key else 'None'}...")
+            print(f"🔐 API Secret found: {api_secret[:10] if api_secret else 'None'}...")
+            
+            if not api_key:
+                return {'status': 'ERROR', 'message': 'API key not found in environment'}
+            
+            # Try to load access token
+            access_token_paths = [
+                "access_token.txt",
+                "../data/access_token.txt", 
+                "../../data/access_token.txt",
+                "./data/access_token.txt",
+                "../../agent_tools/data/access_token.txt",
+                "../../../agent_tools/data/access_token.txt"
+            ]
+            
+            access_token = None
+            for path in access_token_paths:
+                try:
+                    if os.path.exists(path):
+                        with open(path, "r") as f:
+                            access_token = f.read().strip()
+                            print(f"✅ Loaded access token from: {path}")
+                            break
+                except Exception as e:
+                    print(f"❌ Failed to load {path}: {e}")
+                    continue
+            
+            if not access_token:
+                return {'status': 'ERROR', 'message': 'Access token not found'}
+            
+            # Initialize connection
+            init_result = connect_data_tools.initialize_connection(api_key, api_secret, access_token)
+            return init_result
+            
+        except Exception as e:
+            return {'status': 'ERROR', 'message': f'Connection initialization failed: {str(e)}'}
+    
+    return {'status': 'SUCCESS', 'message': 'Connection already initialized'}
+
+
+def get_account_margins() -> Dict[str, Any]:
+    """
+    Get account margin information.
+    
+    Returns:
+        Dict with margin details
+        Note that if intraday_payin is there then it means that the money has been added today and might not reflect in available_cash
+        and it will be reflected in the next day's available_cash but its available for trading today
+    """
+    try:
+        if connect_data_tools is None:
+            return {'status': 'ERROR', 'message': 'Connection tools not available'}
+        
+        if not hasattr(connect_data_tools, '_kite_instance') or connect_data_tools._kite_instance is None:
+            # Try to initialize connection
+            init_result = ensure_connection_initialized()
+            if init_result.get('status') != 'SUCCESS':
+                return {'status': 'ERROR', 'message': f'Connection initialization failed: {init_result.get("message")}'}
+        
+        margins = connect_data_tools._kite_instance.margins()
+        equity_margins = margins.get('equity', {})
+        # Calculate true unrealized P&L from open NIFTY positions
+        positions_result = get_portfolio_positions()
+        if positions_result.get('status') == 'SUCCESS':
+            unrealized_pnl = positions_result.get('total_pnl', 0)
+        else:
+            unrealized_pnl = 0
+        return {
+            'status': 'SUCCESS',
+            'equity': {
+                'available_cash': equity_margins.get('available', {}).get('cash', 0),
+                'opening_balance': equity_margins.get('available', {}).get('opening_balance', 0),
+                'live_balance': equity_margins.get('available', {}).get('live_balance', 0),
+                'used_margin': equity_margins.get('used', {}).get('debits', 0),
+                'intraday_payin': equity_margins.get('available', {}).get('intraday_payin', 0),
+                'unrealized_pnl': unrealized_pnl
+            },
+            'timestamp': dt.datetime.now().isoformat()
+        }
+    
+    except Exception as e:
+        return {
+            'status': 'ERROR',
+            'message': f'Failed to get margins: {str(e)}'
+        }

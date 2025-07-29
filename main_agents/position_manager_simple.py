@@ -1,0 +1,312 @@
+#!/usr/bin/env python3
+"""
+AlgoTrade - SIMPLE POSITION MANAGER (SCALPING)
+==============================================
+
+A minimal, high-speed, rules-based position manager for intraday NIFTY scalping.
+- Only checks for profit, loss, and a cool-off period after exit.
+- No RSI, trend, or indicator logic.
+- Designed for maximum robustness and simplicity.
+"""
+
+import os
+import json
+from datetime import datetime, timedelta
+import pytz
+from typing import Dict, Any
+
+from core_tools.trade_storage import get_active_trades
+from core_tools.execution_portfolio_tools import get_portfolio_positions
+
+IST_TIMEZONE = pytz.timezone('Asia/Kolkata')
+PROFIT_TARGET_PCT = 15.0
+STOP_LOSS_PCT = -8.0
+ABSOLUTE_PROFIT_PER_LOT = 500
+LOT_SIZE = 75
+COOL_OFF_MINUTES = 10
+EXTREME_LOSS_PCT = -30
+FORCED_SQUARE_OFF_TIME = (15, 20)  # 3:20 PM IST
+
+class SimplePositionManager:
+    def __init__(self):
+        self.active_trades = get_active_trades()
+        self.recently_closed = {}  # symbol: datetime of last closure
+        self.entry_times = {}  # symbol: datetime of entry (simulate; in prod, use actual trade storage)
+        
+        # Default values (fallback only)
+        self.DEFAULT_STOP_LOSS_PCT = -8.0
+        self.DEFAULT_PROFIT_TARGET_PCT = 8.0  # Lower profit target for more frequent wins
+        self.DEFAULT_COOL_OFF_MINUTES = 10
+        self.DEFAULT_MAX_HOLD_TIME_MINUTES = 30
+        self.DEFAULT_MIN_HOLD_TIME_MINUTES = 3  # Minimum 3 minutes unless extreme loss
+
+    def get_trade_parameters(self, trade_id):
+        """Get trade-specific parameters from active_trades.json"""
+        if trade_id in self.active_trades:
+            trade_data = self.active_trades[trade_id]
+            risk_management = trade_data.get('risk_management', {})
+            
+            # Parse stop loss (e.g., "2%" -> -2.0)
+            stop_loss_str = risk_management.get('stop_loss', f"{abs(self.DEFAULT_STOP_LOSS_PCT)}%")
+            stop_loss_pct = -float(stop_loss_str.replace('%', ''))
+            
+            # Parse profit target (e.g., "10%" -> 10.0)
+            profit_target_str = risk_management.get('profit_target', f"{self.DEFAULT_PROFIT_TARGET_PCT}%")
+            profit_target_pct = float(profit_target_str.replace('%', ''))
+            
+            # Parse max hold time (e.g., "15 minutes" -> 15)
+            max_hold_time_str = risk_management.get('max_hold_time', f"{self.DEFAULT_MAX_HOLD_TIME_MINUTES} minutes")
+            max_hold_time_minutes = int(max_hold_time_str.split()[0])
+            
+            # Parse min hold time (e.g., "3 minutes" -> 3) - default if not specified
+            min_hold_time_str = risk_management.get('min_hold_time', f"{self.DEFAULT_MIN_HOLD_TIME_MINUTES} minutes")
+            min_hold_time_minutes = int(min_hold_time_str.split()[0])
+            
+            return {
+                'stop_loss_pct': stop_loss_pct,
+                'profit_target_pct': profit_target_pct,
+                'max_hold_time_minutes': max_hold_time_minutes,
+                'min_hold_time_minutes': min_hold_time_minutes,
+                'trade_data': trade_data
+            }
+        
+        # Fallback to defaults
+        return {
+            'stop_loss_pct': self.DEFAULT_STOP_LOSS_PCT,
+            'profit_target_pct': self.DEFAULT_PROFIT_TARGET_PCT,
+            'max_hold_time_minutes': self.DEFAULT_MAX_HOLD_TIME_MINUTES,
+            'min_hold_time_minutes': self.DEFAULT_MIN_HOLD_TIME_MINUTES,
+            'trade_data': None
+        }
+
+    def manage_positions(self):
+        print("\n" + "="*80)
+        print("⚡ Running Simple Scalping Position Manager...")
+        positions_result = get_portfolio_positions()
+        if positions_result.get('status') != 'SUCCESS':
+            print("❌ Could not get portfolio positions. Aborting.")
+            return {'status': 'ERROR', 'message': 'Could not get portfolio positions'}
+        open_positions = [
+            p for p in positions_result.get('positions', [])
+            if 'NIFTY' in p.get('symbol', '')
+        ]
+        if not open_positions:
+            print("✅ No open NIFTY positions to manage.")
+            return {'status': 'SUCCESS', 'decision': 'NO_POSITIONS'}
+        print(f"🔎 Found {len(open_positions)} open NIFTY position(s).")
+        now = datetime.now(IST_TIMEZONE)
+        # Check for forced square-off
+        if now.time() >= datetime.time(datetime.strptime(f"{FORCED_SQUARE_OFF_TIME[0]}:{FORCED_SQUARE_OFF_TIME[1]}", "%H:%M")):
+            for pos in open_positions:
+                symbol = pos.get('symbol')
+                quantity = pos.get('quantity')
+                trade_id = self.find_trade_id_for_symbol(symbol)
+                print(f"  ⏰ FORCED SQUARE-OFF: Exiting {symbol} at 3:20 PM or later.")
+                self.exit_position(symbol, quantity, trade_id, "Forced Square-Off (3:20 PM)")
+                self.recently_closed[symbol] = now
+            print("="*80)
+            return {'status': 'SUCCESS', 'decision': 'FORCED_SQUARE_OFF'}
+        for pos in open_positions:
+            symbol = pos.get('symbol')
+            print(f"  [DEBUG] Raw position data for {symbol}:\n{json.dumps(pos, indent=2)}")
+            # Simulate entry time if not present (in prod, use actual entry time from trade storage)
+            if symbol not in self.entry_times:
+                self.entry_times[symbol] = now
+            self.evaluate_position(pos, now)
+        print("="*80)
+        return {'status': 'SUCCESS', 'decision': 'MANAGEMENT_CYCLE_COMPLETE'}
+
+    def evaluate_position(self, pos, now):
+        symbol = pos.get('symbol')
+        quantity = pos.get('quantity')
+        avg_price = pos.get('average_price')
+        last_price = pos.get('last_price')
+        pnl = (last_price - avg_price) * quantity
+        initial_investment = avg_price * abs(quantity)
+        pnl_percentage = (pnl / initial_investment) * 100 if initial_investment > 0 else 0
+        trade_id = self.find_trade_id_for_symbol(symbol)
+        
+        # Get trade-specific parameters
+        trade_params = self.get_trade_parameters(trade_id)
+        stop_loss_pct = trade_params['stop_loss_pct']
+        profit_target_pct = trade_params['profit_target_pct']
+        max_hold_time_minutes = trade_params['max_hold_time_minutes']
+        min_hold_time_minutes = trade_params['min_hold_time_minutes']
+        trade_data = trade_params.get('trade_data')
+        
+        print(f"  - Evaluating {symbol} (Qty: {quantity}): P&L: {pnl_percentage:.2f}% | Absolute P&L: ₹{pnl:.2f}")
+        print(f"    📊 Trade Parameters: Stop Loss: {abs(stop_loss_pct)}%, Profit Target: {profit_target_pct}%, Max Hold: {max_hold_time_minutes}min, Min Hold: {min_hold_time_minutes}min")
+        
+        # Get actual entry time from trade storage
+        entry_time = None
+        if trade_data and trade_data.get('entry_time'):
+            try:
+                entry_time = datetime.fromisoformat(trade_data['entry_time'].replace('Z', '+00:00'))
+                if entry_time.tzinfo is None:
+                    entry_time = IST_TIMEZONE.localize(entry_time)
+            except Exception as e:
+                print(f"    ⚠️  Error parsing entry time: {e}")
+                entry_time = None
+        
+        # Fallback to simulated entry time if not available
+        if entry_time is None:
+            if symbol not in self.entry_times:
+                self.entry_times[symbol] = now
+            entry_time = self.entry_times[symbol]
+        
+        minutes_since_entry = (now - entry_time).total_seconds() // 60 if entry_time else None
+        
+        print(f"    ⏰ Entry Time: {entry_time.strftime('%H:%M:%S')} | Minutes Since Entry: {int(minutes_since_entry) if minutes_since_entry else 'Unknown'}")
+        
+        # Check max hold time
+        if minutes_since_entry is not None and minutes_since_entry >= max_hold_time_minutes:
+            print(f"  ⏰ MAX HOLD TIME REACHED: Exiting {symbol} after {int(minutes_since_entry)} minutes (max: {max_hold_time_minutes}min).")
+            self.exit_position(symbol, quantity, trade_id, f"Max Hold Time ({max_hold_time_minutes} minutes)")
+            self.recently_closed[symbol] = now
+            return
+        
+        # Absolute profit target
+        if abs(quantity) % LOT_SIZE == 0 and pnl >= ABSOLUTE_PROFIT_PER_LOT * (abs(quantity) // LOT_SIZE):
+            print(f"  💰 ABSOLUTE PROFIT TARGET HIT: Exiting {symbol} at ₹{pnl:.2f} profit (Qty: {quantity}).")
+            self.exit_position(symbol, quantity, trade_id, f"Absolute Profit Target (₹{ABSOLUTE_PROFIT_PER_LOT} per lot)")
+            self.recently_closed[symbol] = now
+            return
+        
+        # Percentage profit target (from trade parameters)
+        if pnl_percentage >= profit_target_pct:
+            print(f"  ✅ PROFIT TARGET HIT: Exiting {symbol} at {pnl_percentage:.2f}% profit (target: {profit_target_pct}%).")
+            self.exit_position(symbol, quantity, trade_id, f"Profit Target ({profit_target_pct}%)")
+            self.recently_closed[symbol] = now
+            return
+        
+        # Minimum hold time check (unless extreme loss)
+        if minutes_since_entry is not None and minutes_since_entry < min_hold_time_minutes:
+            if pnl_percentage <= EXTREME_LOSS_PCT:
+                print(f"  🚨 EXTREME LOSS: Exiting {symbol} at {pnl_percentage:.2f}% loss (within min hold time).")
+                self.exit_position(symbol, quantity, trade_id, "Extreme Loss (Min hold override)")
+                self.recently_closed[symbol] = now
+                return
+            elif pnl_percentage <= stop_loss_pct:
+                print(f"  ⏳ MIN HOLD TIME: Holding {symbol} (opened {int(minutes_since_entry)} min ago, loss {pnl_percentage:.2f}%). Not exiting unless extreme loss.")
+                return
+        
+        # Cool-off for loss exits only (after minimum hold time)
+        if minutes_since_entry is not None and minutes_since_entry < COOL_OFF_MINUTES:
+            if pnl_percentage <= EXTREME_LOSS_PCT:
+                print(f"  🚨 EXTREME LOSS: Exiting {symbol} at {pnl_percentage:.2f}% loss (within {COOL_OFF_MINUTES} min of entry).")
+                self.exit_position(symbol, quantity, trade_id, "Extreme Loss (Cool-off override)")
+                self.recently_closed[symbol] = now
+                return
+            elif pnl_percentage <= stop_loss_pct:
+                print(f"  ⏳ COOL-OFF: Holding {symbol} (opened {int(minutes_since_entry)} min ago, loss {pnl_percentage:.2f}%). Not exiting unless extreme loss.")
+                return
+        
+        # Stop-loss (after minimum hold time and cool-off)
+        if pnl_percentage <= stop_loss_pct:
+            print(f"  ❌ STOP-LOSS HIT: Exiting {symbol} at {pnl_percentage:.2f}% loss (stop: {abs(stop_loss_pct)}%).")
+            self.exit_position(symbol, quantity, trade_id, f"Stop-Loss ({abs(stop_loss_pct)}%)")
+            self.recently_closed[symbol] = now
+            return
+        
+        # Cool-off: skip re-entry for recently closed symbols
+        last_closed = self.recently_closed.get(symbol)
+        if last_closed and (now - last_closed) < timedelta(minutes=COOL_OFF_MINUTES):
+            print(f"  ⏳ COOL-OFF: Skipping re-entry for {symbol} (closed {int((now - last_closed).total_seconds()//60)} min ago)")
+            return
+        
+        print(f"  -> HOLDING {symbol}. No exit criteria met.")
+
+    def exit_position(self, symbol, quantity, trade_id, reason):
+        print(f"  🔄 EXIT: {symbol} | Qty: {quantity} | Reason: {reason}")
+        from core_tools.execution_portfolio_tools import execute_options_strategy
+        
+        action = 'SELL' if quantity > 0 else 'BUY'
+        closing_leg = [{
+            'symbol': symbol,
+            'action': action,
+            'quantity': abs(quantity)
+        }]
+        
+        # Execute the exit order
+        result = execute_options_strategy(closing_leg, order_type='Closing')
+        print(f"    📝 Exit result: {json.dumps(result, indent=2)}")
+        
+        # Update trade storage if execution was successful
+        if result.get('status') == 'BASKET_SUCCESS':
+            try:
+                # Import trade storage functions
+                from core_tools.trade_storage import update_trade_status, move_trade_to_history
+                
+                # Calculate exit price from the result
+                exit_price = None
+                if result.get('settlement_details') and result['settlement_details'].get('settled_orders'):
+                    exit_price = result['settlement_details']['settled_orders'][0].get('avg_price')
+                
+                # Calculate P&L
+                pnl = 0.0
+                if exit_price:
+                    # Get the trade data to calculate P&L
+                    from core_tools.trade_storage import get_active_trades
+                    active_trades = get_active_trades()
+                    if trade_id in active_trades:
+                        trade_data = active_trades[trade_id]
+                        entry_price = None
+                        
+                        # Get entry price from execution details
+                        execution_details = trade_data.get('execution_details', {})
+                        settlement_details = execution_details.get('settlement_details', {})
+                        settled_orders = settlement_details.get('settled_orders', [])
+                        
+                        if settled_orders:
+                            entry_price = settled_orders[0].get('avg_price')
+                        
+                        if entry_price:
+                            pnl = (exit_price - entry_price) * abs(quantity)
+                
+                # Update trade status to closed
+                update_result = update_trade_status(
+                    trade_id=trade_id,
+                    status='CLOSED',
+                    pnl=pnl,
+                    exit_reason=reason,
+                    exit_price=exit_price
+                )
+                
+                if update_result.get('status') == 'SUCCESS':
+                    print(f"    ✅ Trade {trade_id} marked as CLOSED in storage")
+                    
+                    # Move to history
+                    if trade_id in active_trades:
+                        move_trade_to_history(trade_id, active_trades[trade_id])
+                        print(f"    📚 Trade {trade_id} moved to history")
+                else:
+                    print(f"    ⚠️  Failed to update trade storage: {update_result.get('message')}")
+                    
+            except Exception as e:
+                print(f"    ⚠️  Error updating trade storage: {str(e)}")
+        else:
+            print(f"    ❌ Exit execution failed: {result.get('message')}")
+
+    def find_trade_id_for_symbol(self, symbol):
+        """Find the actual trade ID for a given symbol from active trades."""
+        try:
+            from core_tools.trade_storage import get_active_trades
+            active_trades = get_active_trades()
+            
+            # Look for the symbol in active trades
+            for trade_id, trade_data in active_trades.items():
+                legs = trade_data.get('legs', [])
+                for leg in legs:
+                    if leg.get('symbol') == symbol:
+                        return trade_id
+            
+            # If not found, return None
+            return None
+            
+        except Exception as e:
+            print(f"    ⚠️  Error finding trade ID for {symbol}: {str(e)}")
+            return None
+
+if __name__ == "__main__":
+    mgr = SimplePositionManager()
+    mgr.manage_positions() 
