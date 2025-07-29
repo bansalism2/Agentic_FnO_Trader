@@ -446,15 +446,28 @@ def cleanup_market_close():
     Clean up active_trades.json at market close
     """
     try:
-        logger.info("Cleaning up active_trades.json at market close...")
+        logger.info("🧹 Cleaning up active_trades.json at market close...")
         
         # Import trade storage module
         import sys
         sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-        from core_tools.trade_storage import clear_active_trades
+        from core_tools.trade_storage import clear_active_trades, get_active_trades
         
-        clear_active_trades()
-        logger.info("✅ Active trades cleaned up successfully")
+        # Check if there are any active trades before clearing
+        active_trades = get_active_trades()
+        if active_trades:
+            logger.warning(f"⚠️ Found {len(active_trades)} active trades at market close - clearing them")
+            for trade_id in active_trades.keys():
+                logger.warning(f"  - Clearing trade: {trade_id}")
+        else:
+            logger.info("✅ No active trades found - clean state")
+        
+        # Clear active trades
+        result = clear_active_trades()
+        if result.get('status') == 'SUCCESS':
+            logger.info("✅ Active trades cleaned up successfully")
+        else:
+            logger.error(f"❌ Failed to clear active trades: {result.get('message')}")
         
     except ImportError as e:
         logger.warning(f"Trade storage module not available: {e}")
@@ -574,6 +587,21 @@ def main(force_run=False):
                 if current_time >= dt_time(15, 30):  # 3:30 PM or later
                     logger.info("Market has closed (3:30 PM). Stopping crew driver...")
                     logger.info("All positions should have been squared off by 3:20 PM")
+                    
+                    # Final cleanup of active trades before shutdown
+                    logger.info("🧹 Final cleanup of active_trades.json before shutdown...")
+                    try:
+                        from core_tools.trade_storage import clear_active_trades, get_active_trades
+                        active_trades = get_active_trades()
+                        if active_trades:
+                            logger.warning(f"⚠️ Final cleanup: Found {len(active_trades)} active trades - clearing them")
+                            clear_active_trades()
+                            logger.info("✅ Final cleanup completed")
+                        else:
+                            logger.info("✅ Final cleanup: No active trades found")
+                    except Exception as e:
+                        logger.error(f"❌ Final cleanup failed: {e}")
+                    
                     break
                 
                 # Run scheduled tasks

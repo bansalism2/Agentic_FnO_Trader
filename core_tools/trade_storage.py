@@ -60,6 +60,11 @@ def write_successful_trade(trade_data: Dict[str, Any]) -> Dict[str, Any]:
         # Read existing trades
         active_trades = get_active_trades()
         
+        # Ensure active_trades is a dictionary
+        if not isinstance(active_trades, dict):
+            print(f"Warning: active_trades is not a dict, it's {type(active_trades)}. Resetting to empty dict.")
+            active_trades = {}
+        
         # Add new trade
         active_trades[trade_id] = trade_data
         
@@ -94,7 +99,14 @@ def get_active_trades() -> Dict[str, Any]:
             return {}
         
         with open(TRADES_FILE, 'r') as f:
-            return json.load(f)
+            data = json.load(f)
+            
+        # Ensure we return a dictionary
+        if isinstance(data, dict):
+            return data
+        else:
+            print(f"Warning: active_trades.json contains {type(data)}, expected dict. Returning empty dict.")
+            return {}
             
     except Exception as e:
         print(f"Error reading active trades: {e}")
@@ -267,6 +279,30 @@ def get_trade_summary() -> Dict[str, Any]:
         return {
             'status': 'ERROR',
             'message': f'Failed to get trade summary: {str(e)}'
+        }
+
+def clear_active_trades() -> Dict[str, Any]:
+    """
+    Clear only active_trades.json (preserves trade history).
+    Used for end-of-day cleanup.
+    
+    Returns:
+        Dict with status
+    """
+    try:
+        if TRADES_FILE.exists():
+            TRADES_FILE.unlink()
+            print(f"✅ Cleared active_trades.json at {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        
+        return {
+            'status': 'SUCCESS',
+            'message': 'Active trades cleared (trade history preserved)'
+        }
+        
+    except Exception as e:
+        return {
+            'status': 'ERROR',
+            'message': f'Failed to clear active trades: {str(e)}'
         }
 
 def clear_storage() -> Dict[str, Any]:
