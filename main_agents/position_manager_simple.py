@@ -409,7 +409,7 @@ def get_recent_intended_trades(symbol: str = None, minutes_back: int = 30) -> Li
     Used to check if opportunity hunter wants this position before exiting.
     """
     try:
-        log_file = os.path.join(os.path.dirname(__file__), 'intended_trades.jsonl')
+        log_file = os.path.join(os.path.dirname(__file__), '..', 'data', 'intended_trades.jsonl')
         if not os.path.exists(log_file):
             return []
         

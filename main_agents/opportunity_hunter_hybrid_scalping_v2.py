@@ -656,7 +656,7 @@ def append_indicator_history(market_conditions, timestamp):
     """Append market conditions to indicator_history.jsonl as a JSON line."""
     log_entry = dict(market_conditions)
     log_entry['timestamp'] = str(timestamp)
-    log_path = os.path.join(os.path.dirname(__file__), 'indicator_history.jsonl')
+    log_path = os.path.join(os.path.dirname(__file__), '..', 'data', 'indicator_history.jsonl')
     with open(log_path, 'a') as f:
         f.write(json.dumps(log_entry) + '\n')
 
@@ -741,7 +741,7 @@ def log_intended_trade(symbol: str, action: str, reason: str, market_conditions:
     This helps the position manager make intelligent exit decisions.
     """
     try:
-        log_file = os.path.join(os.path.dirname(__file__), 'intended_trades.jsonl')
+        log_file = os.path.join(os.path.dirname(__file__), '..', 'data', 'intended_trades.jsonl')
         intended_trade = {
             'timestamp': datetime.now().isoformat(),
             'symbol': symbol,
@@ -770,7 +770,7 @@ def get_recent_intended_trades(symbol: str = None, minutes_back: int = 30) -> Li
     Used by position manager to check if opportunity hunter wants this position.
     """
     try:
-        log_file = os.path.join(os.path.dirname(__file__), 'intended_trades.jsonl')
+        log_file = os.path.join(os.path.dirname(__file__), '..', 'data', 'intended_trades.jsonl')
         if not os.path.exists(log_file):
             return []
         
@@ -839,7 +839,7 @@ def run_hybrid_scalping_opportunity_hunter() -> Dict[str, Any]:
         append_indicator_history(market_conditions, datetime.now())
 
         # Load indicator history and apply trend-following filter (today only)
-        log_path = os.path.join(os.path.dirname(__file__), 'indicator_history.jsonl')
+        log_path = os.path.join(os.path.dirname(__file__), '..', 'data', 'indicator_history.jsonl')
         history = load_indicator_history_today(log_path, lookback=4)
         trend_signal = trend_following_signal(history, lookback=4)
         regime_signal = volatility_regime_switch_signal(history)
