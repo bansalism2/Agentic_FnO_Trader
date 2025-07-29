@@ -10,13 +10,25 @@ A minimal, high-speed, rules-based position manager for intraday NIFTY scalping.
 """
 
 import os
+import sys
 import json
+import logging
 from datetime import datetime, timedelta
-import pytz
-from typing import Dict, Any
+from typing import Dict, Any, Optional, List
+import pandas as pd
 
-from core_tools.trade_storage import get_active_trades
-from core_tools.execution_portfolio_tools import get_portfolio_positions
+# Add the parent directory to the path to import core_tools
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+
+import pytz
+
+from core_tools.execution_portfolio_tools import (
+    get_portfolio_positions, get_account_margins
+)
+from core_tools.trade_storage import (
+    get_active_trades, update_trade_status, move_trade_to_history,
+    get_trade_history
+)
 
 IST_TIMEZONE = pytz.timezone('Asia/Kolkata')
 PROFIT_TARGET_PCT = 15.0
@@ -207,6 +219,12 @@ class SimplePositionManager:
         
         # Check max hold time
         if minutes_since_entry is not None and minutes_since_entry >= max_hold_time_minutes:
+            # Check if opportunity hunter wants this position before exiting
+            action = 'LONG_CALL' if 'CE' in symbol else 'LONG_PUT' if 'PE' in symbol else 'UNKNOWN'
+            if should_avoid_exit_due_to_intended_trade(symbol, action):
+                print(f"  🤔 MAX HOLD TIME: Avoiding exit on {symbol} - Opportunity hunter wants this position")
+                return
+            
             print(f"  ⏰ MAX HOLD TIME REACHED: Exiting {symbol} after {int(minutes_since_entry)} minutes (max: {max_hold_time_minutes}min).")
             self.exit_position(symbol, quantity, trade_id, f"Max Hold Time ({max_hold_time_minutes} minutes)")
             self.recently_closed[symbol] = now
@@ -214,6 +232,12 @@ class SimplePositionManager:
         
         # Absolute profit target
         if abs(quantity) % LOT_SIZE == 0 and pnl >= ABSOLUTE_PROFIT_PER_LOT * (abs(quantity) // LOT_SIZE):
+            # Check if opportunity hunter wants this position before exiting
+            action = 'LONG_CALL' if 'CE' in symbol else 'LONG_PUT' if 'PE' in symbol else 'UNKNOWN'
+            if should_avoid_exit_due_to_intended_trade(symbol, action):
+                print(f"  🤔 ABSOLUTE PROFIT: Avoiding exit on {symbol} - Opportunity hunter wants this position")
+                return
+            
             print(f"  💰 ABSOLUTE PROFIT TARGET HIT: Exiting {symbol} at ₹{pnl:.2f} profit (Qty: {quantity}).")
             self.exit_position(symbol, quantity, trade_id, f"Absolute Profit Target (₹{ABSOLUTE_PROFIT_PER_LOT} per lot)")
             self.recently_closed[symbol] = now
@@ -221,6 +245,12 @@ class SimplePositionManager:
         
         # Percentage profit target (from trade parameters)
         if pnl_percentage >= profit_target_pct:
+            # Check if opportunity hunter wants this position before exiting
+            action = 'LONG_CALL' if 'CE' in symbol else 'LONG_PUT' if 'PE' in symbol else 'UNKNOWN'
+            if should_avoid_exit_due_to_intended_trade(symbol, action):
+                print(f"  🤔 PROFIT TARGET: Avoiding exit on {symbol} - Opportunity hunter wants this position")
+                return
+            
             print(f"  ✅ PROFIT TARGET HIT: Exiting {symbol} at {pnl_percentage:.2f}% profit (target: {profit_target_pct}%).")
             self.exit_position(symbol, quantity, trade_id, f"Profit Target ({profit_target_pct}%)")
             self.recently_closed[symbol] = now
@@ -229,6 +259,12 @@ class SimplePositionManager:
         # Minimum hold time check (unless extreme loss)
         if minutes_since_entry is not None and minutes_since_entry < min_hold_time_minutes:
             if pnl_percentage <= EXTREME_LOSS_PCT:
+                # Check if opportunity hunter wants this position before exiting
+                action = 'LONG_CALL' if 'CE' in symbol else 'LONG_PUT' if 'PE' in symbol else 'UNKNOWN'
+                if should_avoid_exit_due_to_intended_trade(symbol, action):
+                    print(f"  🤔 EXTREME LOSS: Avoiding exit on {symbol} - Opportunity hunter wants this position")
+                    return
+                
                 print(f"  🚨 EXTREME LOSS: Exiting {symbol} at {pnl_percentage:.2f}% loss (within min hold time).")
                 self.exit_position(symbol, quantity, trade_id, "Extreme Loss (Min hold override)")
                 self.recently_closed[symbol] = now
@@ -240,6 +276,12 @@ class SimplePositionManager:
         # Cool-off for loss exits only (after minimum hold time)
         if minutes_since_entry is not None and minutes_since_entry < COOL_OFF_MINUTES:
             if pnl_percentage <= EXTREME_LOSS_PCT:
+                # Check if opportunity hunter wants this position before exiting
+                action = 'LONG_CALL' if 'CE' in symbol else 'LONG_PUT' if 'PE' in symbol else 'UNKNOWN'
+                if should_avoid_exit_due_to_intended_trade(symbol, action):
+                    print(f"  🤔 EXTREME LOSS: Avoiding exit on {symbol} - Opportunity hunter wants this position")
+                    return
+                
                 print(f"  🚨 EXTREME LOSS: Exiting {symbol} at {pnl_percentage:.2f}% loss (within {COOL_OFF_MINUTES} min of entry).")
                 self.exit_position(symbol, quantity, trade_id, "Extreme Loss (Cool-off override)")
                 self.recently_closed[symbol] = now
@@ -250,6 +292,12 @@ class SimplePositionManager:
         
         # Stop-loss (after minimum hold time and cool-off)
         if pnl_percentage <= stop_loss_pct:
+            # Check if opportunity hunter wants this position before exiting
+            action = 'LONG_CALL' if 'CE' in symbol else 'LONG_PUT' if 'PE' in symbol else 'UNKNOWN'
+            if should_avoid_exit_due_to_intended_trade(symbol, action):
+                print(f"  🤔 STOP-LOSS: Avoiding exit on {symbol} - Opportunity hunter wants this position")
+                return
+            
             print(f"  ❌ STOP-LOSS HIT: Exiting {symbol} at {pnl_percentage:.2f}% loss (stop: {abs(stop_loss_pct)}%).")
             self.exit_position(symbol, quantity, trade_id, f"Stop-Loss ({abs(stop_loss_pct)}%)")
             self.recently_closed[symbol] = now
@@ -353,6 +401,65 @@ class SimplePositionManager:
         except Exception as e:
             print(f"    ⚠️  Error finding trade ID for {symbol}: {str(e)}")
             return None
+
+def get_recent_intended_trades(symbol: str = None, minutes_back: int = 30) -> List[Dict[str, Any]]:
+    """
+    Get recent intended trades from opportunity hunter, optionally filtered by symbol.
+    Used to check if opportunity hunter wants this position before exiting.
+    """
+    try:
+        log_file = os.path.join(os.path.dirname(__file__), 'intended_trades.jsonl')
+        if not os.path.exists(log_file):
+            return []
+        
+        cutoff_time = datetime.now().timestamp() - (minutes_back * 60)
+        recent_trades = []
+        
+        with open(log_file, 'r') as f:
+            for line in f:
+                try:
+                    trade = json.loads(line.strip())
+                    trade_time = datetime.fromisoformat(trade['timestamp']).timestamp()
+                    
+                    if trade_time >= cutoff_time:
+                        if symbol is None or trade['symbol'] == symbol:
+                            recent_trades.append(trade)
+                except:
+                    continue
+        
+        return recent_trades
+        
+    except Exception as e:
+        print(f"⚠️ Failed to read intended trades: {e}")
+        return []
+
+def should_avoid_exit_due_to_intended_trade(symbol: str, action: str) -> bool:
+    """
+    Check if we should avoid exiting a position because opportunity hunter wants it.
+    Returns True if we should avoid exit, False if we should proceed with exit.
+    """
+    try:
+        # Get recent intended trades for this symbol
+        recent_intended = get_recent_intended_trades(symbol, minutes_back=15)  # Last 15 minutes
+        
+        if not recent_intended:
+            return False  # No recent intended trades, safe to exit
+        
+        # Check if any recent intended trade matches our position
+        for intended in recent_intended:
+            intended_action = intended.get('action', '')
+            intended_symbol = intended.get('symbol', '')
+            
+            # If opportunity hunter wanted this exact position recently, avoid exit
+            if intended_symbol == symbol and intended_action == action:
+                print(f"🤔 Avoiding exit on {symbol} - Opportunity hunter wanted {action} recently")
+                return True
+        
+        return False
+        
+    except Exception as e:
+        print(f"⚠️ Error checking intended trades: {e}")
+        return False  # On error, proceed with normal exit logic
 
 if __name__ == "__main__":
     mgr = SimplePositionManager()

@@ -14,9 +14,10 @@ import os
 import json
 import logging
 from datetime import datetime, time as dt_time
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from dotenv import load_dotenv
 import numpy as np
+import pandas as pd
 
 # Add the parent directory to the path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -38,8 +39,7 @@ from core_tools.calculate_analysis_tools import (
 from core_tools.connect_data_tools import (
     get_nifty_spot_price, get_available_expiry_dates_with_analysis, initialize_connection, get_options_chain
 )
-from core_tools.execution_portfolio_tools import get_daily_trading_summary
-from core_tools.execution_portfolio_tools import get_portfolio_positions, execute_and_store_strategy, get_account_margins
+from core_tools.execution_portfolio_tools import get_daily_trading_summary, get_portfolio_positions, execute_and_store_strategy, get_account_margins
 from core_tools.strategy_creation_tools import (
     create_long_straddle_wrapper,
     create_short_strangle_wrapper, 
@@ -47,8 +47,9 @@ from core_tools.strategy_creation_tools import (
     create_bull_put_spread_wrapper,
     create_bear_call_spread_wrapper
 )
-from core_tools.master_indicators import get_nifty_technical_analysis_tool
+from core_tools.master_indicators import get_nifty_technical_analysis_tool, get_trading_signals
 from core_tools.calculate_analysis_tools import detect_market_regime_wrapper
+from core_tools.trade_storage import get_active_trades
 # Removed crew_agent dependency - hybrid system is independent
 
 # --- CONFIGURATION ---
@@ -734,6 +735,66 @@ def volatility_regime_switch_signal(history):
         return "LONG_OPTION"
     return "WAIT"
 
+def log_intended_trade(symbol: str, action: str, reason: str, market_conditions: Dict[str, Any]) -> None:
+    """
+    Log what trade the opportunity hunter would have taken if no positions were open.
+    This helps the position manager make intelligent exit decisions.
+    """
+    try:
+        log_file = os.path.join(os.path.dirname(__file__), 'intended_trades.jsonl')
+        intended_trade = {
+            'timestamp': datetime.now().isoformat(),
+            'symbol': symbol,
+            'action': action,  # 'LONG_CALL', 'LONG_PUT', etc.
+            'reason': reason,
+            'market_conditions': {
+                'rsi': market_conditions.get('rsi', 0),
+                'adx': market_conditions.get('adx', 0),
+                'macd_signal': market_conditions.get('macd_signal', 'NEUTRAL'),
+                'market_regime': market_conditions.get('market_regime', 'UNKNOWN'),
+                'trend_signal': market_conditions.get('trend_signal', 'NEUTRAL')
+            }
+        }
+        
+        with open(log_file, 'a') as f:
+            f.write(json.dumps(intended_trade) + '\n')
+        
+        print(f"📝 Logged intended trade: {action} on {symbol} (deferred due to existing position)")
+        
+    except Exception as e:
+        print(f"⚠️ Failed to log intended trade: {e}")
+
+def get_recent_intended_trades(symbol: str = None, minutes_back: int = 30) -> List[Dict[str, Any]]:
+    """
+    Get recent intended trades, optionally filtered by symbol.
+    Used by position manager to check if opportunity hunter wants this position.
+    """
+    try:
+        log_file = os.path.join(os.path.dirname(__file__), 'intended_trades.jsonl')
+        if not os.path.exists(log_file):
+            return []
+        
+        cutoff_time = datetime.now().timestamp() - (minutes_back * 60)
+        recent_trades = []
+        
+        with open(log_file, 'r') as f:
+            for line in f:
+                try:
+                    trade = json.loads(line.strip())
+                    trade_time = datetime.fromisoformat(trade['timestamp']).timestamp()
+                    
+                    if trade_time >= cutoff_time:
+                        if symbol is None or trade['symbol'] == symbol:
+                            recent_trades.append(trade)
+                except:
+                    continue
+        
+        return recent_trades
+        
+    except Exception as e:
+        print(f"⚠️ Failed to read intended trades: {e}")
+        return []
+
 def run_hybrid_scalping_opportunity_hunter() -> Dict[str, Any]:
     """
     Main entry for the hybrid scalping opportunity hunter.
@@ -749,24 +810,7 @@ def run_hybrid_scalping_opportunity_hunter() -> Dict[str, Any]:
             'timestamp': datetime.now().isoformat()
         }
     
-    # CRITICAL SAFETY CHECK: First, check if a position is already open.
-    try:
-        positions_result = get_portfolio_positions()
-        if positions_result.get('status') == 'SUCCESS':
-            open_positions = [
-                p for p in positions_result.get('positions', [])
-                if 'NIFTY' in p.get('symbol', '')
-            ]
-            if open_positions:
-                print("🔵 Position already open. Deferring to Position Manager.")
-                return {
-                    'status': 'DEFERRED',
-                    'decision': 'WAIT',
-                    'reason': 'An existing NIFTY position is being managed.'
-                }
-    except Exception as e:
-        print(f"⚠️ Could not check for existing positions: {e}")
-        # Continue, but with a warning. Or decide to halt. For now, we log and continue.
+    # We'll check for existing positions after determining what trade would be taken
 
     try:
         print("🚀 Starting HYBRID SCALPING & PREMIUM SELLING HUNTER...")
@@ -824,6 +868,28 @@ def run_hybrid_scalping_opportunity_hunter() -> Dict[str, Any]:
         if trend_signal == "LONG":
             if regime_signal == "LONG_OPTION":
                 print("[Decision] Executing scalping LONG (trend+regime aligned, normal size)")
+                
+                # CRITICAL SAFETY CHECK: Check if a position is already open before executing
+                try:
+                    positions_result = get_portfolio_positions()
+                    if positions_result.get('status') == 'SUCCESS':
+                        open_positions = [
+                            p for p in positions_result.get('positions', [])
+                            if 'NIFTY' in p.get('symbol', '')
+                        ]
+                        if open_positions:
+                            print("🔵 Position already open. Logging intended trade and deferring to Position Manager.")
+                            # Log what we would have done
+                            log_intended_trade('NIFTY', 'LONG_CALL', f'Would have taken LONG CALL (trend+regime aligned)', market_conditions)
+                            return {
+                                'status': 'DEFERRED',
+                                'decision': 'WAIT',
+                                'reason': 'An existing NIFTY position is being managed.',
+                                'intended_action': 'LONG_CALL'
+                            }
+                except Exception as e:
+                    print(f"⚠️ Could not check for existing positions: {e}")
+                
                 result = hybrid_system.scalping_engine.execute(market_conditions)
                 # Check if execution was successful
                 if result.get('status') == 'SUCCESS':
@@ -842,6 +908,28 @@ def run_hybrid_scalping_opportunity_hunter() -> Dict[str, Any]:
                     }
             else:
                 print("[Decision] Executing scalping LONG (trend only, regime not ideal: reduced size/tighter stop)")
+                
+                # CRITICAL SAFETY CHECK: Check if a position is already open before executing
+                try:
+                    positions_result = get_portfolio_positions()
+                    if positions_result.get('status') == 'SUCCESS':
+                        open_positions = [
+                            p for p in positions_result.get('positions', [])
+                            if 'NIFTY' in p.get('symbol', '')
+                        ]
+                        if open_positions:
+                            print("🔵 Position already open. Logging intended trade and deferring to Position Manager.")
+                            # Log what we would have done
+                            log_intended_trade('NIFTY', 'LONG_CALL', f'Would have taken LONG CALL (trend only, regime not ideal)', market_conditions)
+                            return {
+                                'status': 'DEFERRED',
+                                'decision': 'WAIT',
+                                'reason': 'An existing NIFTY position is being managed.',
+                                'intended_action': 'LONG_CALL'
+                            }
+                except Exception as e:
+                    print(f"⚠️ Could not check for existing positions: {e}")
+                
                 # Patch market_conditions to signal reduced size/tighter stop
                 patched = dict(market_conditions)
                 patched['regime_not_ideal'] = True
@@ -866,6 +954,28 @@ def run_hybrid_scalping_opportunity_hunter() -> Dict[str, Any]:
         elif trend_signal == "SHORT":
             if regime_signal == "LONG_OPTION":
                 print("[Decision] Executing scalping SHORT (trend+regime aligned, normal size)")
+                
+                # CRITICAL SAFETY CHECK: Check if a position is already open before executing
+                try:
+                    positions_result = get_portfolio_positions()
+                    if positions_result.get('status') == 'SUCCESS':
+                        open_positions = [
+                            p for p in positions_result.get('positions', [])
+                            if 'NIFTY' in p.get('symbol', '')
+                        ]
+                        if open_positions:
+                            print("🔵 Position already open. Logging intended trade and deferring to Position Manager.")
+                            # Log what we would have done
+                            log_intended_trade('NIFTY', 'LONG_PUT', f'Would have taken LONG PUT (trend+regime aligned)', market_conditions)
+                            return {
+                                'status': 'DEFERRED',
+                                'decision': 'WAIT',
+                                'reason': 'An existing NIFTY position is being managed.',
+                                'intended_action': 'LONG_PUT'
+                            }
+                except Exception as e:
+                    print(f"⚠️ Could not check for existing positions: {e}")
+                
                 result = hybrid_system.scalping_engine.execute(market_conditions)
                 # Check if execution was successful
                 if result.get('status') == 'SUCCESS':
@@ -884,6 +994,28 @@ def run_hybrid_scalping_opportunity_hunter() -> Dict[str, Any]:
                     }
             else:
                 print("[Decision] Executing scalping SHORT (trend only, regime not ideal: reduced size/tighter stop)")
+                
+                # CRITICAL SAFETY CHECK: Check if a position is already open before executing
+                try:
+                    positions_result = get_portfolio_positions()
+                    if positions_result.get('status') == 'SUCCESS':
+                        open_positions = [
+                            p for p in positions_result.get('positions', [])
+                            if 'NIFTY' in p.get('symbol', '')
+                        ]
+                        if open_positions:
+                            print("🔵 Position already open. Logging intended trade and deferring to Position Manager.")
+                            # Log what we would have done
+                            log_intended_trade('NIFTY', 'LONG_PUT', f'Would have taken LONG PUT (trend only, regime not ideal)', market_conditions)
+                            return {
+                                'status': 'DEFERRED',
+                                'decision': 'WAIT',
+                                'reason': 'An existing NIFTY position is being managed.',
+                                'intended_action': 'LONG_PUT'
+                            }
+                except Exception as e:
+                    print(f"⚠️ Could not check for existing positions: {e}")
+                
                 patched = dict(market_conditions)
                 patched['regime_not_ideal'] = True
                 result = hybrid_system.scalping_engine.execute(patched)
