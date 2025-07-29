@@ -48,6 +48,7 @@ from core_tools.strategy_creation_tools import (
     create_bear_call_spread_wrapper
 )
 from core_tools.master_indicators import get_nifty_technical_analysis_tool
+from core_tools.calculate_analysis_tools import detect_market_regime_wrapper
 # Removed crew_agent dependency - hybrid system is independent
 
 # --- CONFIGURATION ---
@@ -607,26 +608,32 @@ def _calculate_market_conditions() -> Dict[str, Any]:
         logger.warning(f"Failed to get spot price: {e}")
     
     try:
-        # CRITICAL FIX: Increased days to 5 to ensure sufficient data for indicators
-        technical_data = get_nifty_technical_analysis_tool(days=5, interval="15minute")
-        if technical_data.get('status') != 'SUCCESS':
-            logger.error(f"CRITICAL: Technical analysis tool failed: {technical_data.get('error')}. Cannot proceed.")
-            return {'status': 'ERROR', 'message': f"Technical analysis data unavailable: {technical_data.get('error')}"}
-        
-        volume_ratio = technical_data.get('latest_indicator_values', {}).get('volume_ratio', 1.0)
-        # SAFETY NET: Ensure volume_ratio is a valid number
-        if not np.isfinite(volume_ratio):
-            volume_ratio = 1.0
-            
-        market_conditions.update({
-            'rsi': technical_data.get('latest_indicator_values', {}).get('rsi', 50),
-            'macd_signal': technical_data.get('trading_signals', {}).get('macd', 'NEUTRAL'),
-            'volume_ratio': volume_ratio,
-            'market_regime': technical_data.get('trading_signals', {}).get('adx', 'WEAK_TREND')
-        })
-        market_conditions['trend_strength'] = abs(market_conditions['rsi'] - 50) / 50
+        technical_data = get_nifty_technical_analysis_tool()
+        if technical_data.get('status') == 'SUCCESS':
+            market_conditions.update({
+                'spot_price': technical_data.get('spot_price', 0),
+                'adx': technical_data.get('latest_indicator_values', {}).get('adx', 0),
+                'trend_strength': technical_data.get('trend_strength', 0)
+            })
     except Exception as e:
         logger.warning(f"Failed to get technical data: {e}")
+    
+    # Get market regime using the proper detection function
+    try:
+        regime_data = detect_market_regime_wrapper()
+        if regime_data.get('status') == 'SUCCESS':
+            market_conditions['market_regime'] = regime_data.get('primary_regime', 'UNKNOWN')
+        else:
+            market_conditions['market_regime'] = 'UNKNOWN'
+    except Exception as e:
+        logger.warning(f"Failed to get market regime: {e}")
+        market_conditions['market_regime'] = 'UNKNOWN'
+            
+    market_conditions.update({
+        'rsi': technical_data.get('latest_indicator_values', {}).get('rsi', 50),
+        'macd_signal': technical_data.get('trading_signals', {}).get('macd', 'NEUTRAL'),
+        'volume_ratio': volume_ratio
+    })
     
     try:
         iv_data = calculate_iv_rank_analysis_wrapper()
@@ -686,9 +693,9 @@ def trend_following_signal(history, lookback=4):
         return "SHORT"
     
     # Regime-based execution (NEW - captures obvious opportunities)
-    if current_regime == "LONG_OPTION" and adx_vals[-1] > 35:
+    if current_regime == "TRENDING_BULL" and adx_vals[-1] > 35:
         if 40 <= rsi_vals[-1] <= 60:  # Neutral but favorable zone
-            print(f"[Regime-Based] LONG_OPTION regime + ADX={adx_vals[-1]:.2f} + RSI={rsi_vals[-1]:.2f}: Triggering LONG signal.")
+            print(f"[Regime-Based] TRENDING_BULL regime + ADX={adx_vals[-1]:.2f} + RSI={rsi_vals[-1]:.2f}: Triggering LONG signal.")
             return "LONG"
     
     # Helper: count rising/flat and falling/flat bars
@@ -773,14 +780,6 @@ def run_hybrid_scalping_opportunity_hunter() -> Dict[str, Any]:
         
         market_conditions = market_data_result['data']
         
-        # Add ADX to market conditions for the mode determination logic
-        try:
-            technical_data = get_nifty_technical_analysis_tool(days=5, interval="15minute")
-            if technical_data.get('status') == 'SUCCESS':
-                market_conditions['adx'] = technical_data.get('latest_indicator_values', {}).get('adx', 0)
-        except Exception:
-            market_conditions['adx'] = 0 # Default if fetch fails
-
         # Always log the market conditions for trend analysis, even if no trade is taken
         append_indicator_history(market_conditions, datetime.now())
 
