@@ -632,7 +632,7 @@ def _calculate_market_conditions() -> Dict[str, Any]:
     market_conditions.update({
         'rsi': technical_data.get('latest_indicator_values', {}).get('rsi', 50),
         'macd_signal': technical_data.get('trading_signals', {}).get('macd', 'NEUTRAL'),
-        'volume_ratio': volume_ratio
+        'volume_ratio': technical_data.get('latest_indicator_values', {}).get('volume_ratio', 1.0)
     })
     
     try:
