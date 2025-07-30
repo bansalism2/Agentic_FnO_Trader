@@ -35,14 +35,14 @@ except ImportError:
 
 
 def create_long_straddle_strategy(expiry_date: str = None, expiry_type: str = 'weekly',
-                                quantity: int = 25) -> Dict[str, Any]:
+                                quantity: int = 75) -> Dict[str, Any]:
     """
     Create a Long Straddle options strategy.
     
     Args:
         expiry_date: Specific expiry (YYYY-MM-DD) or None for auto-selection
         expiry_type: 'weekly' or 'monthly' if expiry_date is None
-        quantity: Number of lots (multiples of 25)
+        quantity: Number of lots (multiples of 75)
     
     Returns:
         Dict with strategy details and execution plan
@@ -135,7 +135,7 @@ def create_long_straddle_strategy(expiry_date: str = None, expiry_type: str = 'w
 
 
 def create_short_strangle_strategy(expiry_date: str = None, expiry_type: str = 'weekly',
-                                 otm_distance: int = 100, quantity: int = 25) -> Dict[str, Any]:
+                                 otm_distance: int = 100, quantity: int = 75) -> Dict[str, Any]:
     """
     Create a Short Strangle options strategy.
     
@@ -240,7 +240,7 @@ def create_short_strangle_strategy(expiry_date: str = None, expiry_type: str = '
 
 
 def create_iron_condor_strategy(expiry_date: str = None, expiry_type: str = 'weekly',
-                              wing_width: int = 100, quantity: int = 25) -> Dict[str, Any]:
+                              wing_width: int = 100, quantity: int = 75) -> Dict[str, Any]:
     """
     Create an Iron Condor options strategy.
     
@@ -364,7 +364,7 @@ def create_iron_condor_strategy(expiry_date: str = None, expiry_type: str = 'wee
 
 def create_butterfly_spread_strategy(expiry_date: str = None, expiry_type: str = 'weekly',
                                    option_type: str = 'CE', wing_width: int = 100,
-                                   quantity: int = 25) -> Dict[str, Any]:
+                                   quantity: int = 75) -> Dict[str, Any]:
     """
     Create a Butterfly Spread options strategy.
     
@@ -500,7 +500,7 @@ def create_butterfly_spread_strategy(expiry_date: str = None, expiry_type: str =
 
 def create_ratio_spread_strategy(expiry_date: str = None, expiry_type: str = 'weekly',
                                option_type: str = 'CE', ratio: str = '1x2',
-                               quantity: int = 25) -> Dict[str, Any]:
+                               quantity: int = 75) -> Dict[str, Any]:
     """
     Create a Ratio Spread strategy (1x2 or 1x3).
     
@@ -965,15 +965,15 @@ def comprehensive_advanced_analysis(spot_price: float,
     try:
         # Import required functions
         from calculate_analysis_tools import (
-            analyze_vix_integration, calculate_iv_rank_analysis, detect_market_regime
+            analyze_vix_integration, calculate_iv_rank_analysis_wrapper, detect_market_regime
         )
         from master_indicators import calculate_pcr_technical_analysis, analyze_pcr_extremes
         
         # 1. VIX Integration & Volatility Regime Detection
         vix_analysis = analyze_vix_integration(spot_price, options_chain, historical_volatility)
         
-        # 2. IV Rank Analysis
-        iv_analysis = calculate_iv_rank_analysis(options_chain, spot_price, historical_iv_data)
+        # 2. TRUE IV Analysis
+        iv_analysis = calculate_iv_rank_analysis_wrapper()
         
         # 3. PCR + Technical Analysis
         pcr_analysis = calculate_pcr_technical_analysis(options_chain, technical_indicators, spot_price)
@@ -1195,7 +1195,7 @@ def comprehensive_advanced_analysis(spot_price: float,
 # ============================================================================
 
 def create_bull_put_spread_strategy(expiry_date: str = None, expiry_type: str = 'weekly',
-                                   spread_width: int = 100, quantity: int = 25) -> Dict[str, Any]:
+                                   spread_width: int = 100, quantity: int = 75) -> Dict[str, Any]:
     """
     Create a Bull Put Spread (Credit Spread) strategy.
     
@@ -1302,7 +1302,7 @@ def create_bull_put_spread_strategy(expiry_date: str = None, expiry_type: str = 
 
 
 def create_bear_call_spread_strategy(expiry_date: str = None, expiry_type: str = 'weekly',
-                                    spread_width: int = 100, quantity: int = 25) -> Dict[str, Any]:
+                                    spread_width: int = 100, quantity: int = 75) -> Dict[str, Any]:
     """
     Create a Bear Call Spread (Credit Spread) strategy.
     
@@ -1409,7 +1409,7 @@ def create_bear_call_spread_strategy(expiry_date: str = None, expiry_type: str =
 
 
 def create_calendar_spread_strategy(expiry_date: str = None, option_type: str = 'CE',
-                                   strike_distance: int = 0, quantity: int = 25) -> Dict[str, Any]:
+                                   strike_distance: int = 0, quantity: int = 75) -> Dict[str, Any]:
     """
     Create a Calendar Spread (Time Spread) strategy.
     
@@ -1521,7 +1521,204 @@ def create_calendar_spread_strategy(expiry_date: str = None, option_type: str = 
         }
 
 
+def create_long_call_strategy(expiry_date: str = None, expiry_type: str = 'weekly',
+                            strike_selection: str = 'OTM', quantity: int = 75) -> Dict[str, Any]:
+    """
+    Create a Long Call options strategy for scalping.
+    
+    Args:
+        expiry_date: Specific expiry (YYYY-MM-DD) or None for auto-selection
+        expiry_type: 'weekly' or 'monthly' if expiry_date is None
+        strike_selection: 'ATM', 'OTM', or 'ITM'
+        quantity: Number of lots (multiples of 75)
+    
+    Returns:
+        Dict with strategy details and execution plan
+    """
+    try:
+        # Get expiry date if not provided
+        if not expiry_date:
+            expiry_result = get_nifty_expiry_dates(expiry_type)
+            if expiry_result['status'] != 'SUCCESS' or not expiry_result['expiries']:
+                return {'status': 'ERROR', 'message': 'No expiry dates available'}
+            expiry_date = expiry_result['expiries'][0]
+        
+        # Get spot price
+        spot_result = get_nifty_spot_price()
+        if spot_result['status'] != 'SUCCESS':
+            return spot_result
+        
+        spot_price = spot_result['spot_price']
+        
+        # Get options chain
+        chain_result = get_options_chain(expiry_date, expiry_type, strike_range=10)
+        if chain_result['status'] != 'SUCCESS':
+            return chain_result
+        
+        # Calculate strike based on selection
+        atm_strike = chain_result['atm_strike']
+        if strike_selection == 'ATM':
+            selected_strike = atm_strike
+        elif strike_selection == 'OTM':
+            selected_strike = atm_strike + 100  # 100 points OTM
+        elif strike_selection == 'ITM':
+            selected_strike = atm_strike - 100  # 100 points ITM
+        else:
+            selected_strike = atm_strike + 100  # Default to OTM
+        
+        chain_data = chain_result['options_chain']
+        
+        # Find selected strike
+        strike_row = next((row for row in chain_data if row['strike'] == selected_strike), None)
+        if not strike_row or 'CE_symbol' not in strike_row:
+            return {'status': 'ERROR', 'message': f'Call option at strike {selected_strike} not found'}
+        
+        call_price = strike_row.get('CE_ltp', 0)
+        if call_price <= 0:
+            return {'status': 'ERROR', 'message': 'Invalid call option price'}
+        
+        # Calculate strategy metrics
+        total_premium = call_price * quantity
+        breakeven = selected_strike + call_price
+        max_loss = total_premium
+        max_profit = 'Unlimited'
+        
+        # Create strategy legs
+        legs = [
+            {
+                'symbol': strike_row['CE_symbol'],
+                'action': 'BUY',
+                'quantity': quantity,
+                'strike': selected_strike,
+                'option_type': 'CE',
+                'price': call_price,
+                'exchange': 'NFO'
+            }
+        ]
+        
+        return {
+            'status': 'SUCCESS',
+            'strategy_name': f'Long Call ({strike_selection})',
+            'expiry_date': expiry_date,
+            'spot_price': spot_price,
+            'selected_strike': selected_strike,
+            'legs': legs,
+            'strategy_metrics': {
+                'total_premium_paid': round(total_premium, 2),
+                'max_profit': max_profit,
+                'max_loss': round(max_loss, 2),
+                'breakeven_point': round(breakeven, 2),
+                'probability_of_profit': 'Depends on movement > ' + str(round(call_price, 2))
+            },
+            'market_outlook': 'Bullish momentum expected',
+            'timestamp': dt.datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        return {
+            'status': 'ERROR',
+            'message': f'Strategy creation failed: {str(e)}'
+        }
 
+
+def create_long_put_strategy(expiry_date: str = None, expiry_type: str = 'weekly',
+                           strike_selection: str = 'OTM', quantity: int = 75) -> Dict[str, Any]:
+    """
+    Create a Long Put options strategy for scalping.
+    
+    Args:
+        expiry_date: Specific expiry (YYYY-MM-DD) or None for auto-selection
+        expiry_type: 'weekly' or 'monthly' if expiry_date is None
+        strike_selection: 'ATM', 'OTM', or 'ITM'
+        quantity: Number of lots (multiples of 75)
+    
+    Returns:
+        Dict with strategy details and execution plan
+    """
+    try:
+        # Get expiry date if not provided
+        if not expiry_date:
+            expiry_result = get_nifty_expiry_dates(expiry_type)
+            if expiry_result['status'] != 'SUCCESS' or not expiry_result['expiries']:
+                return {'status': 'ERROR', 'message': 'No expiry dates available'}
+            expiry_date = expiry_result['expiries'][0]
+        
+        # Get spot price
+        spot_result = get_nifty_spot_price()
+        if spot_result['status'] != 'SUCCESS':
+            return spot_result
+        
+        spot_price = spot_result['spot_price']
+        
+        # Get options chain
+        chain_result = get_options_chain(expiry_date, expiry_type, strike_range=10)
+        if chain_result['status'] != 'SUCCESS':
+            return chain_result
+        
+        # Calculate strike based on selection
+        atm_strike = chain_result['atm_strike']
+        if strike_selection == 'ATM':
+            selected_strike = atm_strike
+        elif strike_selection == 'OTM':
+            selected_strike = atm_strike - 100  # 100 points OTM
+        elif strike_selection == 'ITM':
+            selected_strike = atm_strike + 100  # 100 points ITM
+        else:
+            selected_strike = atm_strike - 100  # Default to OTM
+        
+        chain_data = chain_result['options_chain']
+        
+        # Find selected strike
+        strike_row = next((row for row in chain_data if row['strike'] == selected_strike), None)
+        if not strike_row or 'PE_symbol' not in strike_row:
+            return {'status': 'ERROR', 'message': f'Put option at strike {selected_strike} not found'}
+        
+        put_price = strike_row.get('PE_ltp', 0)
+        if put_price <= 0:
+            return {'status': 'ERROR', 'message': 'Invalid put option price'}
+        
+        # Calculate strategy metrics
+        total_premium = put_price * quantity
+        breakeven = selected_strike - put_price
+        max_loss = total_premium
+        max_profit = selected_strike  # Limited by zero
+        
+        # Create strategy legs
+        legs = [
+            {
+                'symbol': strike_row['PE_symbol'],
+                'action': 'BUY',
+                'quantity': quantity,
+                'strike': selected_strike,
+                'option_type': 'PE',
+                'price': put_price,
+                'exchange': 'NFO'
+            }
+        ]
+        
+        return {
+            'status': 'SUCCESS',
+            'strategy_name': f'Long Put ({strike_selection})',
+            'expiry_date': expiry_date,
+            'spot_price': spot_price,
+            'selected_strike': selected_strike,
+            'legs': legs,
+            'strategy_metrics': {
+                'total_premium_paid': round(total_premium, 2),
+                'max_profit': round(max_profit, 2),
+                'max_loss': round(max_loss, 2),
+                'breakeven_point': round(breakeven, 2),
+                'probability_of_profit': 'Depends on movement > ' + str(round(put_price, 2))
+            },
+            'market_outlook': 'Bearish momentum expected',
+            'timestamp': dt.datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        return {
+            'status': 'ERROR',
+            'message': f'Strategy creation failed: {str(e)}'
+                 }
 
 
 # ============================================================================
@@ -1529,14 +1726,14 @@ def create_calendar_spread_strategy(expiry_date: str = None, option_type: str = 
 # ============================================================================
 
 def create_long_straddle_wrapper(expiry_date: str = None, expiry_type: str = 'weekly',
-                                quantity: int = 25) -> Dict[str, Any]:
+                                quantity: int = 75) -> Dict[str, Any]:
     """
     CrewAI-compatible wrapper for Long Straddle strategy creation.
     
     Args:
         expiry_date: Specific expiry (YYYY-MM-DD) or None for auto-selection
         expiry_type: 'weekly' or 'monthly' if expiry_date is None
-        quantity: Number of lots (multiples of 25)
+        quantity: Number of lots (multiples of 75)
     
     Returns:
         Dict with strategy details and execution plan
@@ -1549,7 +1746,7 @@ def create_long_straddle_wrapper(expiry_date: str = None, expiry_type: str = 'we
 
 
 def create_short_strangle_wrapper(expiry_date: str = None, expiry_type: str = 'weekly',
-                                 otm_distance: int = 100, quantity: int = 25) -> Dict[str, Any]:
+                                 otm_distance: int = 100, quantity: int = 75) -> Dict[str, Any]:
     """
     CrewAI-compatible wrapper for Short Strangle strategy creation.
     
@@ -1570,7 +1767,7 @@ def create_short_strangle_wrapper(expiry_date: str = None, expiry_type: str = 'w
 
 
 def create_iron_condor_wrapper(expiry_date: str = None, expiry_type: str = 'weekly',
-                              wing_width: int = 100, quantity: int = 25) -> Dict[str, Any]:
+                              wing_width: int = 100, quantity: int = 75) -> Dict[str, Any]:
     """
     CrewAI-compatible wrapper for Iron Condor strategy creation.
     
@@ -1592,7 +1789,7 @@ def create_iron_condor_wrapper(expiry_date: str = None, expiry_type: str = 'week
 
 def create_butterfly_spread_wrapper(expiry_date: str = None, expiry_type: str = 'weekly',
                                    option_type: str = 'CE', wing_width: int = 100,
-                                   quantity: int = 25) -> Dict[str, Any]:
+                                   quantity: int = 75) -> Dict[str, Any]:
     """
     CrewAI-compatible wrapper for Butterfly Spread strategy creation.
     
@@ -1614,7 +1811,7 @@ def create_butterfly_spread_wrapper(expiry_date: str = None, expiry_type: str = 
 
 
 def create_bull_put_spread_wrapper(expiry_date: str = None, expiry_type: str = 'weekly',
-                                  spread_width: int = 100, quantity: int = 25) -> Dict[str, Any]:
+                                  spread_width: int = 100, quantity: int = 75) -> Dict[str, Any]:
     """
     CrewAI-compatible wrapper for Bull Put Spread strategy creation.
     
@@ -1635,7 +1832,7 @@ def create_bull_put_spread_wrapper(expiry_date: str = None, expiry_type: str = '
 
 
 def create_bear_call_spread_wrapper(expiry_date: str = None, expiry_type: str = 'weekly',
-                                   spread_width: int = 100, quantity: int = 25) -> Dict[str, Any]:
+                                   spread_width: int = 100, quantity: int = 75) -> Dict[str, Any]:
     """
     CrewAI-compatible wrapper for Bear Call Spread strategy creation.
     
@@ -1656,7 +1853,7 @@ def create_bear_call_spread_wrapper(expiry_date: str = None, expiry_type: str = 
 
 
 def create_calendar_spread_wrapper(expiry_date: str = None, option_type: str = 'CE',
-                                  strike_distance: int = 0, quantity: int = 25) -> Dict[str, Any]:
+                                  strike_distance: int = 0, quantity: int = 75) -> Dict[str, Any]:
     """
     CrewAI-compatible wrapper for Calendar Spread strategy creation.
     
@@ -1688,6 +1885,9 @@ STRATEGY_CREATION_TOOLS = {
     'create_bull_put_spread_strategy': create_bull_put_spread_strategy,
     'create_bear_call_spread_strategy': create_bear_call_spread_strategy,
     'create_calendar_spread_strategy': create_calendar_spread_strategy,
+    # NEW SCALPING STRATEGIES
+    'create_long_call_strategy': create_long_call_strategy,
+    'create_long_put_strategy': create_long_put_strategy,
     # Analysis Functions
     'recommend_options_strategy': recommend_options_strategy,
     'analyze_strategy_greeks': analyze_strategy_greeks,

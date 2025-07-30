@@ -1,0 +1,64 @@
+{
+  "snapshots": [
+    {
+      "timestamp": "2025-07-24T09:28:25.504277",
+      "total_portfolio_pnl_pct": -0.871934604904629,
+      "strategies": {
+        "NIFTY25JUL25300CE": {
+          "pnl_pct": -0.871934604904629,
+          "strategy_name": "SCALP"
+        }
+      }
+    },
+    {
+      "timestamp": "2025-07-24T09:32:43.480212",
+      "total_portfolio_pnl_pct": -2.664796633941094,
+      "strategies": {
+        "NIFTY25JUL25300CE": {
+          "pnl_pct": -2.664796633941094,
+          "strategy_name": "SCALP"
+        }
+      }
+    },
+    {
+      "timestamp": "2025-07-25T10:27:48.549077",
+      "total_portfolio_pnl_pct": 0.0,
+      "strategies": {
+        "NIFTY25JUL24750PE": {
+          "pnl_pct": 0.0,
+          "strategy_name": "SCALP"
+        }
+      }
+    },
+    {
+      "timestamp": "2025-07-25T10:28:58.028116",
+      "total_portfolio_pnl_pct": -1.5078821110349672,
+      "strategies": {
+        "NIFTY25JUL24750PE": {
+          "pnl_pct": -1.5078821110349672,
+          "strategy_name": "SCALP"
+        }
+      }
+    },
+    {
+      "timestamp": "2025-07-25T10:49:30.834528",
+      "total_portfolio_pnl_pct": 3.2654887049877033,
+      "strategies": {
+        "NIFTY25JUL24750PE": {
+          "pnl_pct": 3.2654887049877033,
+          "strategy_name": "SCALP"
+        }
+      }
+    },
+    {
+      "timestamp": "2025-07-25T10:53:09.351817",
+      "total_portfolio_pnl_pct": 4.10804727068093,
+      "strategies": {
+        "NIFTY25JUL24800PE": {
+          "pnl_pct": 4.10804727068093,
+          "strategy_name": "SCALP"
+        }
+      }
+    }
+  ]
+}

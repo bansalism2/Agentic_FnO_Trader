@@ -20,11 +20,11 @@ def main():
         print("=" * 60)
         
         # Import the function
-        from core_tools.calculate_analysis_tools import calculate_historical_iv_data
+        from core_tools.calculate_analysis_tools import calculate_true_iv_data
         
         # Calculate historical IV data (252 trading days = ~1 year)
         print("📊 Calculating historical IV data for 252 trading days...")
-        result = calculate_historical_iv_data(days=252)
+        result = calculate_true_iv_data(days=252)
         
         if result.get('status') == 'SUCCESS':
             print("\n✅ Historical IV data generated successfully!")

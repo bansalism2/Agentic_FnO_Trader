@@ -289,6 +289,14 @@ def calculate_all_indicators(df: pd.DataFrame,
     try:
         indicators = {}
         
+        # Volume Ratio Calculation
+        df['volume_avg'] = df['volume'].rolling(window=20, min_periods=20).mean()
+        df['volume_ratio'] = df['volume'] / df['volume_avg']
+        # CRITICAL FIX: Handle NaN or infinity values in volume_ratio
+        df['volume_ratio'].replace([np.inf, -np.inf], np.nan, inplace=True)
+        df['volume_ratio'].fillna(1.0, inplace=True)
+        indicators["volume_ratio"] = df['volume_ratio']
+
         # Momentum Indicators
         indicators["rsi"] = calculate_rsi(df, rsi_period)
         indicators["macd"] = calculate_macd(df, macd_fast, macd_slow, macd_signal)
@@ -311,6 +319,7 @@ def calculate_all_indicators(df: pd.DataFrame,
         # Latest values for easy access
         indicators["latest_values"] = {
             "rsi": indicators["rsi"].iloc[-1] if not indicators["rsi"].empty else None,
+            "volume_ratio": indicators["volume_ratio"].iloc[-1] if not indicators["volume_ratio"].empty else 1.0,
             "macd": indicators["macd"]["macd"].iloc[-1] if not indicators["macd"]["macd"].empty else None,
             "macd_signal": indicators["macd"]["signal"].iloc[-1] if not indicators["macd"]["signal"].empty else None,
             "bb_upper": indicators["bollinger_bands"]["bb_upper"].iloc[-1] if not indicators["bollinger_bands"]["bb_upper"].empty else None,
@@ -323,6 +332,7 @@ def calculate_all_indicators(df: pd.DataFrame,
         
         # Replace full Series with just latest values to reduce output size
         indicators["rsi"] = indicators["latest_values"]["rsi"]
+        indicators["volume_ratio"] = indicators["latest_values"]["volume_ratio"]
         indicators["macd"] = {
             "macd": indicators["latest_values"]["macd"],
             "signal": indicators["latest_values"]["macd_signal"],
@@ -433,9 +443,13 @@ def get_kite_connection() -> KiteConnect:
     """
     try:
         # Load environment variables from .env file
-        load_dotenv(dotenv_path='./.env')
+        # CRITICAL: Adjust path for robustness when called from different locations
+        dotenv_path = os.path.join(os.path.dirname(__file__), '..', '.env')
+        if not os.path.exists(dotenv_path):
+            dotenv_path = './.env' # Fallback for direct script execution
         
-        # Get API credentials from environment variables
+        load_dotenv(dotenv_path=dotenv_path)
+        
         api_key = os.getenv("kite_api_key")
         api_secret = os.getenv("kite_api_secret")
         
@@ -444,35 +458,37 @@ def get_kite_connection() -> KiteConnect:
         
         # Read access token from access_token.txt - try multiple paths
         access_token = None
-        access_token_paths = [
-            "access_token.txt",  # Current directory
-            "../data/access_token.txt",  # Relative to agent_tools
-            "../../data/access_token.txt",  # Relative to core_tools
-            "./data/access_token.txt"  # Alternative relative path
-        ]
-        
-        for path in access_token_paths:
-            if os.path.exists(path):
-                try:
-                    with open(path, "r") as f:
-                        access_token = f.read().strip()
-                        print(f"✅ Successfully loaded access token from: {path}")
-                        break
-                except Exception as e:
-                    print(f"❌ Error reading access token from {path}: {e}")
-                    continue
-        
-        if not access_token:
-            raise ValueError("Access token not found in any expected location")
+        # Robust path finding for access_token.txt
+        token_path = os.path.join(os.path.dirname(__file__), '..', 'data', 'access_token.txt')
+        if not os.path.exists(token_path):
+            token_path = "../data/access_token.txt" # Fallback
+            
+        if os.path.exists(token_path):
+            try:
+                with open(token_path, "r") as f:
+                    access_token = f.read().strip()
+                if not access_token:
+                    raise ValueError("Access token file is empty.")
+            except Exception as e:
+                raise ValueError(f"Could not read access token from {token_path}: {e}")
+        else:
+            raise ValueError(f"Access token file not found at {token_path}")
         
         # Initialize Kite Connect
         kite = KiteConnect(api_key=api_key)
         kite.set_access_token(access_token)
         
+        # Verify connection by fetching profile
+        kite.profile()
+        
         return kite
         
     except Exception as e:
-        raise Exception(f"Failed to connect to Kite Connect: {str(e)}")
+        # Provide a much more detailed error message
+        error_message = f"CRITICAL: Failed to connect to Kite Connect. Reason: {str(e)}. "
+        error_message += f"Please check API keys in .env and ensure access_token.txt is valid and accessible."
+        print(error_message) # Print for immediate visibility
+        raise Exception(error_message)
 
 
 def get_nifty_instrument_token(kite: KiteConnect) -> int:
@@ -544,7 +560,7 @@ def fetch_nifty_ohlcv_data(days: int = 2, interval: str = "15minute") -> pd.Data
         df = pd.DataFrame(data)
         
         if df.empty:
-            raise ValueError("No data received from Kite Connect API")
+            raise ValueError("No data received from Kite Connect API. This could be due to a holiday or market closure.")
         
         # Set date as index
         df.set_index("date", inplace=True)
@@ -559,7 +575,11 @@ def fetch_nifty_ohlcv_data(days: int = 2, interval: str = "15minute") -> pd.Data
         return df
         
     except Exception as e:
-        raise Exception(f"Failed to fetch NIFTY data: {str(e)}")
+        # Improved error message for data fetching failure
+        error_message = f"Failed to fetch NIFTY OHLCV data. Reason: {str(e)}. "
+        error_message += "This could be due to an invalid access token, network issues, or API limits."
+        print(error_message)
+        raise Exception(error_message)
 
 
 def get_nifty_technical_analysis(days: int = 2, interval: str = "15minute") -> Dict[str, Any]:
@@ -593,13 +613,16 @@ def get_nifty_technical_analysis(days: int = 2, interval: str = "15minute") -> D
         indicators = calculate_all_indicators(df)
         
         if "error" in indicators:
-            return indicators
+            # Propagate error with more context
+            error_message = f"Indicator calculation failed: {indicators['error']}"
+            return {"status": "ERROR", "error": error_message}
         
         # Generate trading signals
         signals = get_trading_signals(indicators, current_price)
         
         # Prepare final result - return what we print
         result = {
+            "status": "SUCCESS",
             "current_price": current_price,
             "data_points": len(df),
             "date_range": {
@@ -616,7 +639,9 @@ def get_nifty_technical_analysis(days: int = 2, interval: str = "15minute") -> D
         return result
         
     except Exception as e:
-        return {"error": f"Technical analysis failed: {str(e)}"}
+        # Centralized error handling for the entire analysis function
+        error_message = f"Technical analysis failed: {str(e)}"
+        return {"status": "ERROR", "error": error_message}
 
 
 # Example usage function
@@ -713,28 +738,41 @@ def calculate_pcr_technical_analysis_wrapper() -> Dict[str, Any]:
     Returns:
         Dict with PCR + Technical analysis for entry timing
     """
+    print("[PCR DEBUG] calculate_pcr_technical_analysis_wrapper() called")
     try:
-        # Import required functions
-        from connect_data_tools import get_nifty_spot_price_safe, get_options_chain_safe
+        # Import required functions - handle different import contexts
+        try:
+            from connect_data_tools import get_nifty_spot_price_safe, get_options_chain_safe
+            print("[PCR DEBUG] Imported from connect_data_tools")
+        except ImportError:
+            from core_tools.connect_data_tools import get_nifty_spot_price_safe, get_options_chain_safe
+            print("[PCR DEBUG] Imported from core_tools.connect_data_tools")
         
         # Get current spot price
+        print("[PCR DEBUG] Getting spot price...")
         spot_result = get_nifty_spot_price_safe()
+        print(f"[PCR DEBUG] get_nifty_spot_price_safe() returned: {spot_result}")
         if spot_result.get('status') != 'SUCCESS':
+            print(f"[PCR DEBUG] Spot price failed: {spot_result}")
             return {
                 'status': 'ERROR',
-                'message': f'Failed to get spot price: {spot_result.get("message", "Unknown error")}'
+                'message': f'Failed to get spot price: {spot_result.get("message", spot_result.get("error", "Unknown error"))}'
             }
         
         spot_price = spot_result.get('spot_price', 0)
         if spot_price <= 0:
+            print(f"[PCR DEBUG] Invalid spot price: {spot_price}")
             return {
                 'status': 'ERROR',
                 'message': 'Invalid spot price received'
             }
         
         # Get options chain
+        print("[PCR DEBUG] Getting options chain...")
         options_result = get_options_chain_safe()
+        print(f"[PCR DEBUG] get_options_chain_safe() returned: {options_result}")
         if options_result.get('status') != 'SUCCESS':
+            print(f"[PCR DEBUG] Options chain failed: {options_result}")
             return {
                 'status': 'ERROR',
                 'message': f'Failed to get options chain: {options_result.get("message", "Unknown error")}'
@@ -742,14 +780,18 @@ def calculate_pcr_technical_analysis_wrapper() -> Dict[str, Any]:
         
         options_chain = options_result.get('options_chain', [])
         if not options_chain:
+            print("[PCR DEBUG] Empty options chain")
             return {
                 'status': 'ERROR',
                 'message': 'Empty options chain received'
             }
         
         # Get technical indicators
-        tech_result = get_nifty_technical_analysis_tool()
+        print("[PCR DEBUG] Getting technical analysis...")
+        tech_result = get_nifty_technical_analysis_tool(days=5, interval="15minute")
+        print(f"[PCR DEBUG] get_nifty_technical_analysis_tool() returned: {tech_result}")
         if 'error' in tech_result:
+            print(f"[PCR DEBUG] Technical analysis failed: {tech_result}")
             return {
                 'status': 'ERROR',
                 'message': f'Failed to get technical analysis: {tech_result.get("error", "Unknown error")}'
@@ -758,9 +800,15 @@ def calculate_pcr_technical_analysis_wrapper() -> Dict[str, Any]:
         technical_indicators = tech_result
         
         # Call the main PCR + Technical analysis function
-        return calculate_pcr_technical_analysis(options_chain, technical_indicators, spot_price)
+        print("[PCR DEBUG] Calling calculate_pcr_technical_analysis...")
+        result = calculate_pcr_technical_analysis(options_chain, technical_indicators, spot_price)
+        print(f"[PCR DEBUG] calculate_pcr_technical_analysis() returned: {result}")
+        return result
         
     except Exception as e:
+        print(f"[PCR DEBUG] Exception in calculate_pcr_technical_analysis_wrapper: {e}")
+        import traceback
+        traceback.print_exc()
         return {
             'status': 'ERROR',
             'message': f'PCR + Technical analysis wrapper failed: {str(e)}'
@@ -775,8 +823,11 @@ def analyze_pcr_extremes_wrapper() -> Dict[str, Any]:
         Dict with PCR extremes analysis for contrarian opportunities
     """
     try:
-        # Import required functions
-        from connect_data_tools import get_options_chain_safe
+        # Import required functions - handle different import contexts
+        try:
+            from connect_data_tools import get_options_chain_safe
+        except ImportError:
+            from core_tools.connect_data_tools import get_options_chain_safe
         
         # Get options chain
         options_result = get_options_chain_safe()
@@ -1113,12 +1164,12 @@ MASTER_INDICATORS_TOOLS = {
 }
 
 
-def get_nifty_daily_technical_analysis_wrapper(days: int = 60) -> Dict[str, Any]:
+def get_nifty_daily_technical_analysis_wrapper(days: int = 90) -> Dict[str, Any]:
     """
     Wrapper function for daily NIFTY technical analysis with robust error handling.
     
     Args:
-        days: Number of days of historical data (default: 60 for sufficient indicator calculation)
+        days: Number of days of historical data (default: 90 for sufficient indicator calculation)
     
     Returns:
         Dict with daily technical analysis or fallback analysis

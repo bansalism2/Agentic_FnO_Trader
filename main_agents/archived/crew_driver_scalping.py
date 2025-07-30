@@ -1,13 +1,21 @@
 #!/usr/bin/env python3
 """
-AlgoTrade Crew Driver - Automated trading crew execution
+AlgoTrade Scalping Crew Driver - High-frequency intraday trading crew execution
 
-This script runs the AlgoTrade agents with split functionality:
-- Opportunity Hunter Agent: Every 15 minutes (finds new trading opportunities with three-stage analysis)
-- Position Manager Agent: Every 15 minutes (manages existing positions)
+This script runs the AlgoTrade scalping agents with enhanced frequency:
+- Scalping Opportunity Hunter Agent: Every 5 minutes (high-frequency opportunity detection)
+- Scalping Position Manager Agent: Every 3 minutes (ultra-frequent position monitoring)
+
+OPTIMIZED FOR INTRADAY SCALPING:
+- High-frequency execution for momentum capture
+- Ultra-tight risk management
+- Volume-based exit criteria
+- No overnight exposure
+- Momentum breakout detection
+- Volatility-based scalping opportunities
 
 Agents run sequentially to avoid conflicts during market hours (9:15 AM to 3:30 PM IST).
-Three-stage analysis enables optimal token efficiency and speed for all market conditions.
+Optimized for quick profit capture and tight risk control.
 
 @author: AlgoTrade Team
 """
@@ -34,7 +42,7 @@ def setup_logging():
     log_dir = current_dir / "logs"
     log_dir.mkdir(exist_ok=True)
     
-    log_file = log_dir / f"crew_driver_{datetime.now().strftime('%Y%m%d')}.log"
+    log_file = log_dir / f"crew_driver_scalping_{datetime.now().strftime('%Y%m%d')}.log"
     
     logging.basicConfig(
         level=logging.INFO,
@@ -53,6 +61,21 @@ MARKET_START_TIME = dt_time(9, 15)  # 9:15 AM - Pre-opening session starts
 MARKET_END_TIME = dt_time(15, 30)   # 3:30 PM
 PRE_MARKET_TIME = dt_time(9, 0)     # 9:00 AM - Pre-market data fetch
 IST_TIMEZONE = pytz.timezone('Asia/Kolkata')
+
+def cleanup_profit_target_marker():
+    """
+    Clean up the profit target marker file at the start of each trading day
+    """
+    try:
+        import os
+        profit_target_file = "/tmp/algotrade_no_more_trades_today"
+        if os.path.exists(profit_target_file):
+            os.remove(profit_target_file)
+            logger.info("✅ Profit target marker file cleaned up for new trading day")
+        else:
+            logger.info("ℹ️  No profit target marker file found - continuing normally")
+    except Exception as e:
+        logger.error(f"Error cleaning up profit target marker: {e}")
 
 def refresh_access_token():
     """
@@ -207,109 +230,110 @@ def refresh_iv_cache():
 
 def cleanup_active_trades():
     """
-    Clean up active_trades.json at market close (3:30 PM)
+    Clean up active_trades.json and portfolio_history.json at market close (3:30 PM)
     """
     try:
         logger.info("=" * 80)
-        logger.info("MARKET CLOSE CLEANUP - CLEANING ACTIVE TRADES")
+        logger.info("MARKET CLOSE CLEANUP - CLEANING ACTIVE TRADES AND PORTFOLIO HISTORY")
         logger.info("=" * 80)
         
         # Path to active_trades.json (relative to main_agents directory)
         active_trades_path = current_dir / ".." / "trade_storage" / "active_trades.json"
-        
         if active_trades_path.exists():
             # Read current active trades
             with open(active_trades_path, 'r') as f:
                 active_trades = json.load(f)
-            
             logger.info(f"Found {len(active_trades)} active trades before cleanup")
-            
             # Clear active trades (all positions should be closed by broker at 3:20 PM)
             with open(active_trades_path, 'w') as f:
                 json.dump({}, f, indent=2)
-            
             logger.info("Active trades cleared successfully")
             logger.info("All positions should have been auto-closed by broker at 3:20 PM")
-            
         else:
-            logger.info("No active_trades.json found - nothing to clean")
+            logger.info("No active_trades.json file found")
+        
+        # Path to portfolio_history.json (relative to main_agents directory)
+        portfolio_history_path = current_dir / ".." / "agent_tools" / "core_tools" / "portfolio_history.json"
+        if portfolio_history_path.exists():
+            # Read current portfolio history
+            with open(portfolio_history_path, 'r') as f:
+                portfolio_history = json.load(f)
+            logger.info(f"Found {len(portfolio_history)} portfolio history entries before cleanup")
+            # Clear portfolio history (start fresh for next day)
+            with open(portfolio_history_path, 'w') as f:
+                json.dump({}, f, indent=2)
+            logger.info("Portfolio history cleared successfully")
+        else:
+            logger.info("No portfolio_history.json file found")
         
         logger.info("=" * 80)
         logger.info("MARKET CLOSE CLEANUP COMPLETED")
         logger.info("=" * 80)
         
     except Exception as e:
-        error_msg = f"Error during market close cleanup: {e}"
-        logger.error(error_msg)
+        logger.error(f"Error during market close cleanup: {e}")
         logger.error(f"Traceback: {traceback.format_exc()}")
 
 def is_market_open(force_run=False):
     """
-    Check if the market is currently open (9:15 AM to 3:30 PM IST)
+    Check if market is currently open
     If force_run is True, always return True (for testing)
     """
     if force_run:
-        logger.info("[TEST MODE] Forcing market open for testing.")
         return True
-    try:
-        # Get current time in IST
-        ist_now = datetime.now(IST_TIMEZONE)
-        current_time = ist_now.time()
-        # Check if it's a weekday (Monday = 0, Sunday = 6)
-        is_weekday = ist_now.weekday() < 5
-        # Check if current time is within market hours
-        is_market_hours = MARKET_START_TIME <= current_time <= MARKET_END_TIME
-        market_open = is_weekday and is_market_hours
-        logger.info(f"Current IST time: {ist_now.strftime('%Y-%m-%d %H:%M:%S %Z')}")
-        logger.info(f"Weekday: {is_weekday}, Market hours: {is_market_hours}, Market open: {market_open}")
-        return market_open
-    except Exception as e:
-        logger.error(f"Error checking market status: {e}")
+    
+    ist_now = datetime.now(IST_TIMEZONE)
+    current_time = ist_now.time()
+    
+    # Check if it's a weekday (Monday = 0, Sunday = 6)
+    if ist_now.weekday() >= 5:  # Saturday or Sunday
         return False
+    
+    # Check if current time is within market hours
+    return MARKET_START_TIME <= current_time <= MARKET_END_TIME
 
-def run_opportunity_hunter(force_run=False):
+def run_scalping_opportunity_hunter(force_run=False):
     """
-    Run the Opportunity Hunter Agent for finding new trading opportunities
+    Run the Scalping Opportunity Hunter Agent for finding high-frequency trading opportunities
     If force_run is True, skip market open check (for testing)
     """
     try:
         logger.info("=" * 80)
-        logger.info("STARTING OPPORTUNITY HUNTER AGENT EXECUTION")
+        logger.info("STARTING SCALPING OPPORTUNITY HUNTER AGENT EXECUTION")
         logger.info("=" * 80)
         
         # Check if market is open
         if not is_market_open(force_run=force_run):
-            logger.info("Market is closed. Skipping opportunity hunter execution.")
+            logger.info("Market is closed. Skipping scalping opportunity hunter execution.")
             return
         
-        # Check if after 2:30 PM IST (TEMPORARILY DISABLED FOR TESTING)
+        # Check if after 2:30 PM IST (no new trades after 2:30 PM for scalping)
         ist_now = datetime.now(IST_TIMEZONE)
         if ist_now.time() >= dt_time(14, 30):
-            logger.info("After 2:30 PM IST. No new trades allowed. Skipping opportunity hunter execution.")
-            logger.info("[TESTING MODE] 2:30 PM check temporarily disabled - continuing execution")
-            # return  # TEMPORARILY COMMENTED OUT FOR TESTING
+            logger.info("After 2:30 PM IST. No new scalping trades allowed. Skipping opportunity hunter execution.")
+            return
         
-        # Import and run the enhanced three-stage opportunity hunter agent with AI agents
-        from opportunity_hunter_agent_enhanced_three_stage import run_enhanced_three_stage_opportunity_hunter
-        logger.info("Executing enhanced three-stage opportunity hunter with AI agents...")
+        # Import and run the SCALPING OPPORTUNITY HUNTER
+        from opportunity_hunter_scalping import run_enhanced_three_stage_opportunity_hunter
+        logger.info("Executing scalping opportunity hunter for high-frequency momentum trades...")
         
-        # Run the enhanced three-stage opportunity hunter with full AI agent logic
+        # Run the scalping opportunity hunter with full AI agent logic
         result = run_enhanced_three_stage_opportunity_hunter()
         
         logger.info("=" * 80)
-        logger.info("THREE-STAGE OPPORTUNITY HUNTER EXECUTION COMPLETED")
+        logger.info("SCALPING OPPORTUNITY HUNTER EXECUTION COMPLETED")
         logger.info("=" * 80)
         logger.info(f"Result: {result}")
         logger.info("=" * 80)
         
     except ImportError as e:
-        error_msg = f"Failed to import opportunity_hunter_agent_enhanced_three_stage_crew_compatible: {e}"
+        error_msg = f"Failed to import opportunity_hunter_scalping: {e}"
         logger.error(error_msg)
-        logger.error("Make sure opportunity_hunter_agent_enhanced_three_stage_crew_compatible.py is in the same directory")
+        logger.error("Make sure opportunity_hunter_scalping.py is in the same directory")
         logger.info("Skipping this run and waiting for next scheduled execution...")
         return False
     except Exception as e:
-        error_msg = f"Error running opportunity hunter agent: {e}"
+        error_msg = f"Error running scalping opportunity hunter agent: {e}"
         logger.error(error_msg)
         logger.error(f"Traceback: {traceback.format_exc()}")
         logger.info("Skipping this run and waiting for next scheduled execution...")
@@ -317,41 +341,41 @@ def run_opportunity_hunter(force_run=False):
     
     return True
 
-def run_position_manager(force_run=False):
+def run_scalping_position_manager(force_run=False):
     """
-    Run the Position Manager Agent for managing existing positions
+    Run the Scalping Position Manager Agent for managing existing positions with high frequency
     If force_run is True, skip market open check (for testing)
     """
     try:
         logger.info("=" * 80)
-        logger.info("STARTING POSITION MANAGER AGENT EXECUTION")
+        logger.info("STARTING SCALPING POSITION MANAGER AGENT EXECUTION")
         logger.info("=" * 80)
         
         # Check if market is open
         if not is_market_open(force_run=force_run):
-            logger.info("Market is closed. Skipping position manager execution.")
+            logger.info("Market is closed. Skipping scalping position manager execution.")
             return
         
-        # Import and run the hybrid position manager agent
-        from position_manager_agent_hybrid import run_ultra_conservative_position_manager_hybrid
-        logger.info("Executing position manager (hybrid)...")
+        # Import and run the scalping position manager agent
+        from position_manager_scalping import run_intraday_scalping_position_manager_hybrid
+        logger.info("Executing scalping position manager for high-frequency monitoring...")
         
-        result = run_ultra_conservative_position_manager_hybrid()
+        result = run_intraday_scalping_position_manager_hybrid()
         
         logger.info("=" * 80)
-        logger.info("POSITION MANAGER EXECUTION COMPLETED")
+        logger.info("SCALPING POSITION MANAGER EXECUTION COMPLETED")
         logger.info("=" * 80)
         logger.info(f"Result: {result}")
         logger.info("=" * 80)
         
     except ImportError as e:
-        error_msg = f"Failed to import position_manager_agent_hybrid: {e}"
+        error_msg = f"Failed to import position_manager_scalping: {e}"
         logger.error(error_msg)
-        logger.error("Make sure position_manager_agent_hybrid.py is in the same directory")
+        logger.error("Make sure position_manager_scalping.py is in the same directory")
         logger.info("Skipping this run and waiting for next scheduled execution...")
         return False
     except Exception as e:
-        error_msg = f"Error running position manager agent: {e}"
+        error_msg = f"Error running scalping position manager agent: {e}"
         logger.error(error_msg)
         logger.error(f"Traceback: {traceback.format_exc()}")
         logger.info("Skipping this run and waiting for next scheduled execution...")
@@ -367,7 +391,8 @@ def force_square_off_all_positions():
         logger.info("=" * 80)
         logger.info("FORCED SQUARE-OFF TRIGGERED AT 3:15 PM - CLOSING ALL POSITIONS")
         logger.info("=" * 80)
-        from position_manager_agent_hybrid import get_portfolio_positions, square_off_positions
+        from core_tools.execution_portfolio_tools import get_portfolio_positions
+        from position_manager_scalping import square_off_positions
         
         positions_result = get_portfolio_positions()
         if positions_result.get('status') == 'SUCCESS':
@@ -390,13 +415,13 @@ def force_square_off_all_positions():
 
 def schedule_agent_execution(force_run=False):
     """
-    Schedule agent execution with specified frequencies
+    Schedule agent execution with enhanced frequencies for scalping
     - Pre-market data: At 9:00 AM or immediately if started late
-    - Opportunity Hunter: Every 15 minutes (fast-track enabled)
-    - Position Manager: Every 15 minutes
-    - Market Close Cleanup: At 3:30 PM
+    - Scalping Opportunity Hunter: Every 5 minutes (high-frequency opportunity detection)
+    - Scalping Position Manager: Every 3 minutes (ultra-frequent position monitoring)
+    - Market Close Cleanup: At 3:35 PM
     """
-    logger.info("Setting up agent schedule...")
+    logger.info("Setting up scalping agent schedule...")
     
     # Check if we need to run pre-market data fetch immediately
     ist_now = datetime.now(IST_TIMEZONE)
@@ -413,11 +438,11 @@ def schedule_agent_execution(force_run=False):
         schedule.every().day.at("09:00").do(fetch_pre_market_data)
         logger.info("Pre-market data fetch scheduled for 9:00 AM")
     
-    # Schedule opportunity hunter every 15 minutes (fast-track optimized)
-    # schedule.every(15).minutes.do(run_opportunity_hunter, force_run=force_run)
+    # Schedule scalping opportunity hunter every 5 minutes (high-frequency)
+    schedule.every(5).minutes.do(run_scalping_opportunity_hunter, force_run=force_run)
     
-    # Schedule position manager every 15 minutes
-    schedule.every(15).minutes.do(run_position_manager, force_run=force_run)
+    # Schedule scalping position manager every 3 minutes (ultra-frequent)
+    schedule.every(3).minutes.do(run_scalping_position_manager, force_run=force_run)
     
     # Schedule market close cleanup at 3:35 PM (after 3:15 PM square-off)
     schedule.every().day.at("15:35").do(cleanup_active_trades)
@@ -425,27 +450,29 @@ def schedule_agent_execution(force_run=False):
     # Schedule forced square-off at 3:15 PM
     schedule.every().day.at("15:15").do(force_square_off_all_positions)
     
-    logger.info("Agent schedule configured:")
+    logger.info("Scalping agent schedule configured:")
     if pre_market_time <= current_time < dt_time(9, 30):
         logger.info("- Pre-market data: Already fetched (late start)")
     else:
         logger.info("- 9:00 AM: Pre-market data fetch")
-    # logger.info("- Every 15 minutes: Three-Stage Opportunity Hunter Agent (new opportunities)")
-    logger.info("- Every 15 minutes: Position Manager Agent (existing positions)")
+    logger.info("- Every 5 minutes: Scalping Opportunity Hunter Agent (high-frequency momentum detection)")
+    logger.info("- Every 3 minutes: Scalping Position Manager Agent (ultra-frequent position monitoring)")
+    logger.info("- 3:15 PM: Forced square-off of all positions")
     logger.info("- 3:35 PM: Market close cleanup (clear active_trades.json)")
     logger.info(f"Market hours: {MARKET_START_TIME.strftime('%H:%M')} - {MARKET_END_TIME.strftime('%H:%M')} IST")
     logger.info("Agents run sequentially to avoid conflicts")
-    logger.info("Three-stage analysis enables optimal token efficiency and speed")
+    logger.info("Optimized for intraday scalping and momentum capture")
+    logger.info("Ultra-tight risk management with high-frequency monitoring")
     logger.info("Failed runs are skipped (no retries) - wait for next scheduled execution")
     logger.info("Press Ctrl+C to stop the driver")
 
 def main(force_run=False):
     """
-    Main function to run the crew driver
+    Main function to run the scalping crew driver
     """
     try:
         logger.info("=" * 80)
-        logger.info("ALGOTRADE CREW DRIVER STARTING")
+        logger.info("ALGOTRADE SCALPING CREW DRIVER STARTING")
         logger.info("=" * 80)
         logger.info(f"Start time: {datetime.now(IST_TIMEZONE).strftime('%Y-%m-%d %H:%M:%S %Z')}")
         
@@ -461,23 +488,26 @@ def main(force_run=False):
         if not iv_refreshed:
             logger.warning("Failed to refresh IV cache. Proceeding with basic analysis...")
         
+        # Clean up profit target marker at the start of each trading day
+        cleanup_profit_target_marker()
+
         # Setup schedule
         schedule_agent_execution(force_run=force_run)
         
         # Run initial execution if market is open
         if is_market_open(force_run=force_run):
-            logger.info("Market is open. Running initial agent executions...")
+            logger.info("Market is open. Running initial scalping agent executions...")
             
             # Run both agents initially (no token refresh here)
-            logger.info("Step 2: Running initial position manager...")
-            pm_success = run_position_manager(force_run=force_run)
+            logger.info("Step 3: Running initial scalping position manager...")
+            pm_success = run_scalping_position_manager(force_run=force_run)
             if not pm_success:
-                logger.warning("Initial position manager run failed - will retry at next scheduled time")
+                logger.warning("Initial scalping position manager run failed - will retry at next scheduled time")
             
-            # logger.info("Step 3: Running initial opportunity hunter...")
-            # oh_success = run_opportunity_hunter(force_run=force_run)
-            # if not oh_success:
-            #     logger.warning("Initial opportunity hunter run failed - will retry at next scheduled time")
+            logger.info("Step 4: Running initial scalping opportunity hunter...")
+            oh_success = run_scalping_opportunity_hunter(force_run=force_run)
+            if not oh_success:
+                logger.warning("Initial scalping opportunity hunter run failed - will retry at next scheduled time")
         else:
             logger.info("Market is closed. Waiting for market hours...")
         
@@ -487,28 +517,28 @@ def main(force_run=False):
                 # Run scheduled tasks
                 schedule.run_pending()
                 
-                time.sleep(60)  # Check every minute
+                time.sleep(30)  # Check every 30 seconds for high-frequency execution
                 
             except KeyboardInterrupt:
                 logger.info("Received interrupt signal. Shutting down...")
                 break
             except Exception as e:
                 logger.error(f"Error in main loop: {e}")
-                logger.info("Waiting 2 minutes before continuing...")
-                time.sleep(120)  # Wait 2 minutes before retrying
+                logger.info("Waiting 1 minute before continuing...")
+                time.sleep(60)  # Wait 1 minute before retrying
         
-        logger.info("Crew driver stopped successfully")
+        logger.info("Scalping crew driver stopped successfully")
         
     except Exception as e:
-        logger.error(f"Fatal error in crew driver: {e}")
+        logger.error(f"Fatal error in scalping crew driver: {e}")
         logger.error(f"Traceback: {traceback.format_exc()}")
         sys.exit(1)
 
 def run_single_execution(force_run=False):
     """
-    Run a single execution of both agents (for testing)
+    Run a single execution of both scalping agents (for testing)
     """
-    logger.info("Running single agent executions...")
+    logger.info("Running single scalping agent executions...")
     
     # Refresh access token ONCE at the start (not before each agent)
     logger.info("Refreshing access token...")
@@ -518,23 +548,23 @@ def run_single_execution(force_run=False):
     logger.info("Refreshing IV cache...")
     refresh_iv_cache()
     
-    # Run position manager first
-    logger.info("Running position manager...")
-    pm_success = run_position_manager(force_run=force_run)
+    # Run scalping position manager first
+    logger.info("Running scalping position manager...")
+    pm_success = run_scalping_position_manager(force_run=force_run)
     if not pm_success:
-        logger.warning("Position manager run failed")
+        logger.warning("Scalping position manager run failed")
     
-    # Run opportunity hunter second
-    # logger.info("Running opportunity hunter...")
-    # oh_success = run_opportunity_hunter(force_run=force_run)
-    # if not oh_success:
-    #     logger.warning("Opportunity hunter run failed")
+    # Run scalping opportunity hunter second
+    logger.info("Running scalping opportunity hunter...")
+    oh_success = run_scalping_opportunity_hunter(force_run=force_run)
+    if not oh_success:
+        logger.warning("Scalping opportunity hunter run failed")
     
-    logger.info("Single execution completed")
+    logger.info("Single scalping execution completed")
 
 if __name__ == "__main__":
     import argparse
-    parser = argparse.ArgumentParser(description='AlgoTrade Crew Driver')
+    parser = argparse.ArgumentParser(description='AlgoTrade Scalping Crew Driver')
     parser.add_argument('--single', action='store_true', 
                        help='Run single execution instead of continuous scheduling')
     parser.add_argument('--test', action='store_true',

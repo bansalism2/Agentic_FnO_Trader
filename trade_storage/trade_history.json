@@ -250,5 +250,1497 @@
     "exit_time": "2025-07-08T12:49:48.741504",
     "exit_reason": "Closed due to expiration within 2 days",
     "exit_price": 0.0
+  },
+  "TRADE_20250714_095554_1": {
+    "trade_id": "TRADE_20250714_095554_1",
+    "status": "CLOSED",
+    "entry_time": "2025-07-14T09:55:54.501803",
+    "last_updated": "2025-07-14T15:15:40.942189",
+    "pnl": "Square-off (time or emergency)",
+    "exit_time": "2025-07-14T15:15:40.942350",
+    "exit_reason": null,
+    "exit_price": null,
+    "strategy_name": "Iron Condor",
+    "strategy_type": "Iron Condor",
+    "expiry_date": "2025-07-24",
+    "spot_price": 25105.55,
+    "emergency_signal": "LOW_IV_UNDERPRICED",
+    "legs": [
+      {
+        "symbol": "NIFTY25JUL25000PE",
+        "action": "SELL",
+        "quantity": 75,
+        "price": 177.05,
+        "order_id": "250714100275511",
+        "exchange": "NFO",
+        "product": "MIS",
+        "order_type": "MARKET"
+      },
+      {
+        "symbol": "NIFTY25JUL25200CE",
+        "action": "SELL",
+        "quantity": 75,
+        "price": 229.05,
+        "order_id": "250714100275518",
+        "exchange": "NFO",
+        "product": "MIS",
+        "order_type": "MARKET"
+      },
+      {
+        "symbol": "NIFTY25JUL24900PE",
+        "action": "BUY",
+        "quantity": 75,
+        "price": 143.8,
+        "order_id": "250714100275523",
+        "exchange": "NFO",
+        "product": "MIS",
+        "order_type": "MARKET"
+      },
+      {
+        "symbol": "NIFTY25JUL25300CE",
+        "action": "BUY",
+        "quantity": 75,
+        "price": 183.5,
+        "order_id": "250714100275532",
+        "exchange": "NFO",
+        "product": "MIS",
+        "order_type": "MARKET"
+      }
+    ],
+    "risk_management": {
+      "strategy_type": "Iron Condor",
+      "max_loss": 0,
+      "max_profit": 0,
+      "breakeven_points": [],
+      "days_to_expiry": 10,
+      "category": "SHORT_TERM"
+    },
+    "analysis_data": {
+      "emergency_signal": "LOW_IV_UNDERPRICED",
+      "current_iv": 0.0504,
+      "iv_percentile": 0.0,
+      "realized_volatility": 0.09246932622130591,
+      "liquidity_score": 100.0,
+      "pcr_signal": null,
+      "pcr_value": null,
+      "pcr_extreme_signal": null,
+      "market_outlook": "Low IV environment - premium selling opportunity",
+      "strategy_metrics": {
+        "net_premium": 0,
+        "max_risk": 0,
+        "probability_of_profit": 0
+      },
+      "atm_strike": 25100,
+      "creation_timestamp": "2025-07-14T09:55:54.501803"
+    },
+    "execution_details": {
+      "status": "BASKET_SUCCESS",
+      "total_legs": 4,
+      "execution_time": 15.773355960845947,
+      "order_results": [
+        {
+          "leg_number": 1,
+          "order_id": "250714100275511",
+          "symbol": "NIFTY25JUL25000PE",
+          "action": "SELL",
+          "quantity": 75,
+          "placement_time": 0.21642112731933594,
+          "status": "VERIFIED",
+          "avg_price": 177.05
+        },
+        {
+          "leg_number": 2,
+          "order_id": "250714100275518",
+          "symbol": "NIFTY25JUL25200CE",
+          "action": "SELL",
+          "quantity": 75,
+          "placement_time": 0.2892768383026123,
+          "status": "VERIFIED",
+          "avg_price": 229.05
+        },
+        {
+          "leg_number": 3,
+          "order_id": "250714100275523",
+          "symbol": "NIFTY25JUL24900PE",
+          "action": "BUY",
+          "quantity": 75,
+          "placement_time": 0.38717007637023926,
+          "status": "VERIFIED",
+          "avg_price": 143.8
+        },
+        {
+          "leg_number": 4,
+          "order_id": "250714100275532",
+          "symbol": "NIFTY25JUL25300CE",
+          "action": "BUY",
+          "quantity": 75,
+          "placement_time": 0.4958069324493408,
+          "status": "VERIFIED",
+          "avg_price": 183.5
+        }
+      ],
+      "settlement_details": {
+        "all_successful": true,
+        "settled_orders": [
+          {
+            "leg_number": 1,
+            "order_id": "250714100275511",
+            "symbol": "NIFTY25JUL25000PE",
+            "action": "SELL",
+            "quantity": 75,
+            "placement_time": 0.21642112731933594,
+            "status": "VERIFIED",
+            "avg_price": 177.05
+          },
+          {
+            "leg_number": 2,
+            "order_id": "250714100275518",
+            "symbol": "NIFTY25JUL25200CE",
+            "action": "SELL",
+            "quantity": 75,
+            "placement_time": 0.2892768383026123,
+            "status": "VERIFIED",
+            "avg_price": 229.05
+          },
+          {
+            "leg_number": 3,
+            "order_id": "250714100275523",
+            "symbol": "NIFTY25JUL24900PE",
+            "action": "BUY",
+            "quantity": 75,
+            "placement_time": 0.38717007637023926,
+            "status": "VERIFIED",
+            "avg_price": 143.8
+          },
+          {
+            "leg_number": 4,
+            "order_id": "250714100275532",
+            "symbol": "NIFTY25JUL25300CE",
+            "action": "BUY",
+            "quantity": 75,
+            "placement_time": 0.4958069324493408,
+            "status": "VERIFIED",
+            "avg_price": 183.5
+          }
+        ],
+        "failed_orders": [],
+        "partial_fills": [],
+        "success_rate": 1.0
+      },
+      "message": "All 4 legs executed successfully"
+    }
+  },
+  "TRADE_20250714_151602_1": {
+    "strategy_name": "Iron Condor (Weekly)",
+    "legs": [
+      {
+        "symbol": "NIFTY25JUL24900PE",
+        "action": "BUY",
+        "quantity": 75,
+        "strike": 24900.0,
+        "option_type": "PE",
+        "price": 133.65,
+        "exchange": "NFO"
+      },
+      {
+        "symbol": "NIFTY25JUL25000PE",
+        "action": "SELL",
+        "quantity": 75,
+        "strike": 25000.0,
+        "option_type": "PE",
+        "price": 165.25,
+        "exchange": "NFO"
+      },
+      {
+        "symbol": "NIFTY25JUL25200CE",
+        "action": "SELL",
+        "quantity": 75,
+        "strike": 25200.0,
+        "option_type": "CE",
+        "price": 223.5,
+        "exchange": "NFO"
+      },
+      {
+        "symbol": "NIFTY25JUL25300CE",
+        "action": "BUY",
+        "quantity": 75,
+        "strike": 25300.0,
+        "option_type": "CE",
+        "price": 177.1,
+        "exchange": "NFO"
+      }
+    ],
+    "expiry_date": "2025-07-31",
+    "spot_price": 25082.55,
+    "strategy_type": "Iron Condor (Weekly)",
+    "risk_management": {
+      "net_premium": 5850.0,
+      "max_profit": 5850.0,
+      "max_loss": 1650.0,
+      "breakeven_points": [
+        24922.0,
+        25278.0
+      ],
+      "profit_range": "25000.0 to 25200.0",
+      "wing_width": 100
+    },
+    "analysis_data": {
+      "market_outlook": "Neutral - expecting range-bound movement",
+      "strategy_metrics": {
+        "net_premium": 5850.0,
+        "max_profit": 5850.0,
+        "max_loss": 1650.0,
+        "breakeven_points": [
+          24922.0,
+          25278.0
+        ],
+        "profit_range": "25000.0 to 25200.0",
+        "wing_width": 100
+      },
+      "atm_strike": 25100.0,
+      "creation_timestamp": "2025-07-14T15:15:47.167514"
+    },
+    "execution_details": {
+      "status": "BASKET_SUCCESS",
+      "total_legs": 4,
+      "execution_time": 15.616685152053833,
+      "order_results": [
+        {
+          "leg_number": 1,
+          "order_id": "250714101050099",
+          "symbol": "NIFTY25JUL25000PE",
+          "action": "SELL",
+          "quantity": 75,
+          "placement_time": 0.14900612831115723,
+          "status": "VERIFIED",
+          "avg_price": 164.75
+        },
+        {
+          "leg_number": 2,
+          "order_id": "250714101050103",
+          "symbol": "NIFTY25JUL25200CE",
+          "action": "SELL",
+          "quantity": 75,
+          "placement_time": 0.23493194580078125,
+          "status": "VERIFIED",
+          "avg_price": 223.35
+        },
+        {
+          "leg_number": 3,
+          "order_id": "250714101050112",
+          "symbol": "NIFTY25JUL24900PE",
+          "action": "BUY",
+          "quantity": 75,
+          "placement_time": 0.30668115615844727,
+          "status": "VERIFIED",
+          "avg_price": 133.65
+        },
+        {
+          "leg_number": 4,
+          "order_id": "250714101050117",
+          "symbol": "NIFTY25JUL25300CE",
+          "action": "BUY",
+          "quantity": 75,
+          "placement_time": 0.3972349166870117,
+          "status": "VERIFIED",
+          "avg_price": 177.7
+        }
+      ],
+      "settlement_details": {
+        "all_successful": true,
+        "settled_orders": [
+          {
+            "leg_number": 1,
+            "order_id": "250714101050099",
+            "symbol": "NIFTY25JUL25000PE",
+            "action": "SELL",
+            "quantity": 75,
+            "placement_time": 0.14900612831115723,
+            "status": "VERIFIED",
+            "avg_price": 164.75
+          },
+          {
+            "leg_number": 2,
+            "order_id": "250714101050103",
+            "symbol": "NIFTY25JUL25200CE",
+            "action": "SELL",
+            "quantity": 75,
+            "placement_time": 0.23493194580078125,
+            "status": "VERIFIED",
+            "avg_price": 223.35
+          },
+          {
+            "leg_number": 3,
+            "order_id": "250714101050112",
+            "symbol": "NIFTY25JUL24900PE",
+            "action": "BUY",
+            "quantity": 75,
+            "placement_time": 0.30668115615844727,
+            "status": "VERIFIED",
+            "avg_price": 133.65
+          },
+          {
+            "leg_number": 4,
+            "order_id": "250714101050117",
+            "symbol": "NIFTY25JUL25300CE",
+            "action": "BUY",
+            "quantity": 75,
+            "placement_time": 0.3972349166870117,
+            "status": "VERIFIED",
+            "avg_price": 177.7
+          }
+        ],
+        "failed_orders": [],
+        "partial_fills": [],
+        "success_rate": 1.0
+      },
+      "message": "All 4 legs executed successfully"
+    },
+    "trade_id": "TRADE_20250714_151602_1",
+    "status": "CLOSED",
+    "entry_time": "2025-07-14T15:16:02.977723",
+    "last_updated": "2025-07-14T15:16:18.748950",
+    "pnl": "Square-off (time or emergency)",
+    "exit_time": "2025-07-14T15:16:18.749098",
+    "exit_reason": null,
+    "exit_price": null
+  },
+  "TRADE_20250715_140630_7": {
+    "strategy_name": "Long Straddle (Weekly)",
+    "legs": [
+      {
+        "symbol": "NIFTY25JUL25200CE",
+        "action": "BUY",
+        "quantity": 75,
+        "strike": 25200.0,
+        "option_type": "CE",
+        "price": 238.35,
+        "exchange": "NFO"
+      },
+      {
+        "symbol": "NIFTY25JUL25200PE",
+        "action": "BUY",
+        "quantity": 75,
+        "strike": 25200.0,
+        "option_type": "PE",
+        "price": 200.85,
+        "exchange": "NFO"
+      }
+    ],
+    "expiry_date": "2025-07-31",
+    "spot_price": 25177.7,
+    "strategy_type": "Long Straddle (Weekly)",
+    "risk_management": {
+      "total_premium_paid": 32940.0,
+      "max_profit": "Unlimited",
+      "max_loss": 32940.0,
+      "breakeven_points": [
+        24760.8,
+        25639.2
+      ],
+      "probability_of_profit": "Depends on movement > 439.2"
+    },
+    "analysis_data": {
+      "market_outlook": "High volatility expected, direction uncertain",
+      "strategy_metrics": {
+        "total_premium_paid": 32940.0,
+        "max_profit": "Unlimited",
+        "max_loss": 32940.0,
+        "breakeven_points": [
+          24760.8,
+          25639.2
+        ],
+        "probability_of_profit": "Depends on movement > 439.2"
+      },
+      "atm_strike": 25200.0,
+      "creation_timestamp": "2025-07-15T14:06:14.672477"
+    },
+    "execution_details": {
+      "status": "BASKET_SUCCESS",
+      "total_legs": 2,
+      "execution_time": 15.571239948272705,
+      "order_results": [
+        {
+          "leg_number": 1,
+          "order_id": "250715201038821",
+          "symbol": "NIFTY25JUL25200PE",
+          "action": "BUY",
+          "quantity": 75,
+          "placement_time": 0.19957494735717773,
+          "status": "VERIFIED",
+          "avg_price": 200.7
+        },
+        {
+          "leg_number": 2,
+          "order_id": "250715201038829",
+          "symbol": "NIFTY25JUL25200CE",
+          "action": "BUY",
+          "quantity": 75,
+          "placement_time": 0.32695770263671875,
+          "status": "VERIFIED",
+          "avg_price": 239.2
+        }
+      ],
+      "settlement_details": {
+        "all_successful": true,
+        "settled_orders": [
+          {
+            "leg_number": 1,
+            "order_id": "250715201038821",
+            "symbol": "NIFTY25JUL25200PE",
+            "action": "BUY",
+            "quantity": 75,
+            "placement_time": 0.19957494735717773,
+            "status": "VERIFIED",
+            "avg_price": 200.7
+          },
+          {
+            "leg_number": 2,
+            "order_id": "250715201038829",
+            "symbol": "NIFTY25JUL25200CE",
+            "action": "BUY",
+            "quantity": 75,
+            "placement_time": 0.32695770263671875,
+            "status": "VERIFIED",
+            "avg_price": 239.2
+          }
+        ],
+        "failed_orders": [],
+        "partial_fills": [],
+        "success_rate": 1.0
+      },
+      "message": "All 2 legs executed successfully"
+    },
+    "trade_id": "TRADE_20250715_140630_7",
+    "status": "CLOSED",
+    "entry_time": "2025-07-15T14:06:30.388616",
+    "last_updated": "2025-07-15T15:15:48.998621",
+    "pnl": "Square-off (time or emergency)",
+    "exit_time": "2025-07-15T15:15:48.998933",
+    "exit_reason": null,
+    "exit_price": null
+  },
+  "TRADE_20250715_135027_6": {
+    "strategy_name": "Long Straddle (Weekly)",
+    "legs": [
+      {
+        "symbol": "NIFTY25JUL25200CE",
+        "action": "BUY",
+        "quantity": 75,
+        "strike": 25200.0,
+        "option_type": "CE",
+        "price": 245.5,
+        "exchange": "NFO"
+      },
+      {
+        "symbol": "NIFTY25JUL25200PE",
+        "action": "BUY",
+        "quantity": 75,
+        "strike": 25200.0,
+        "option_type": "PE",
+        "price": 193.75,
+        "exchange": "NFO"
+      }
+    ],
+    "expiry_date": "2025-07-31",
+    "spot_price": 25191.8,
+    "strategy_type": "Long Straddle (Weekly)",
+    "risk_management": {
+      "total_premium_paid": 32943.75,
+      "max_profit": "Unlimited",
+      "max_loss": 32943.75,
+      "breakeven_points": [
+        24760.75,
+        25639.25
+      ],
+      "probability_of_profit": "Depends on movement > 439.25"
+    },
+    "analysis_data": {
+      "market_outlook": "High volatility expected, direction uncertain",
+      "strategy_metrics": {
+        "total_premium_paid": 32943.75,
+        "max_profit": "Unlimited",
+        "max_loss": 32943.75,
+        "breakeven_points": [
+          24760.75,
+          25639.25
+        ],
+        "probability_of_profit": "Depends on movement > 439.25"
+      },
+      "atm_strike": 25200.0,
+      "creation_timestamp": "2025-07-15T13:50:11.758512"
+    },
+    "execution_details": {
+      "status": "BASKET_SUCCESS",
+      "total_legs": 2,
+      "execution_time": 15.428690910339355,
+      "order_results": [
+        {
+          "leg_number": 1,
+          "order_id": "250715201000116",
+          "symbol": "NIFTY25JUL25200PE",
+          "action": "BUY",
+          "quantity": 75,
+          "placement_time": 0.17759108543395996,
+          "status": "VERIFIED",
+          "avg_price": 194.05
+        },
+        {
+          "leg_number": 2,
+          "order_id": "250715201000120",
+          "symbol": "NIFTY25JUL25200CE",
+          "action": "BUY",
+          "quantity": 75,
+          "placement_time": 0.2969050407409668,
+          "status": "VERIFIED",
+          "avg_price": 245.5
+        }
+      ],
+      "settlement_details": {
+        "all_successful": true,
+        "settled_orders": [
+          {
+            "leg_number": 1,
+            "order_id": "250715201000116",
+            "symbol": "NIFTY25JUL25200PE",
+            "action": "BUY",
+            "quantity": 75,
+            "placement_time": 0.17759108543395996,
+            "status": "VERIFIED",
+            "avg_price": 194.05
+          },
+          {
+            "leg_number": 2,
+            "order_id": "250715201000120",
+            "symbol": "NIFTY25JUL25200CE",
+            "action": "BUY",
+            "quantity": 75,
+            "placement_time": 0.2969050407409668,
+            "status": "VERIFIED",
+            "avg_price": 245.5
+          }
+        ],
+        "failed_orders": [],
+        "partial_fills": [],
+        "success_rate": 1.0
+      },
+      "message": "All 2 legs executed successfully"
+    },
+    "trade_id": "TRADE_20250715_135027_6",
+    "status": "CLOSED",
+    "entry_time": "2025-07-15T13:50:27.327208",
+    "last_updated": "2025-07-15T15:25:04.916202",
+    "pnl": "Square-off (time or emergency)",
+    "exit_time": "2025-07-15T15:25:04.919645",
+    "exit_reason": null,
+    "exit_price": null
+  },
+  "TRADE_20250716_094809_3": {
+    "strategy_name": "Long Straddle (Weekly)",
+    "legs": [
+      {
+        "symbol": "NIFTY25JUL25150CE",
+        "action": "BUY",
+        "quantity": 75,
+        "strike": 25150.0,
+        "option_type": "CE",
+        "price": 228.15,
+        "exchange": "NFO"
+      },
+      {
+        "symbol": "NIFTY25JUL25150PE",
+        "action": "BUY",
+        "quantity": 75,
+        "strike": 25150.0,
+        "option_type": "PE",
+        "price": 195.55,
+        "exchange": "NFO"
+      }
+    ],
+    "expiry_date": "2025-07-31",
+    "spot_price": 25136.4,
+    "strategy_type": "Long Straddle (Weekly)",
+    "risk_management": {
+      "total_premium_paid": 31777.5,
+      "max_profit": "Unlimited",
+      "max_loss": 31777.5,
+      "breakeven_points": [
+        24726.3,
+        25573.7
+      ],
+      "probability_of_profit": "Depends on movement > 423.7"
+    },
+    "analysis_data": {
+      "market_outlook": "High volatility expected, direction uncertain",
+      "strategy_metrics": {
+        "total_premium_paid": 31777.5,
+        "max_profit": "Unlimited",
+        "max_loss": 31777.5,
+        "breakeven_points": [
+          24726.3,
+          25573.7
+        ],
+        "probability_of_profit": "Depends on movement > 423.7"
+      },
+      "atm_strike": 25150.0,
+      "creation_timestamp": "2025-07-16T09:47:53.592433"
+    },
+    "execution_details": {
+      "status": "BASKET_SUCCESS",
+      "total_legs": 2,
+      "execution_time": 15.458794355392456,
+      "order_results": [
+        {
+          "leg_number": 1,
+          "order_id": "250716200238114",
+          "symbol": "NIFTY25JUL25150PE",
+          "action": "BUY",
+          "quantity": 75,
+          "placement_time": 0.24997806549072266,
+          "status": "VERIFIED",
+          "avg_price": 195.7
+        },
+        {
+          "leg_number": 2,
+          "order_id": "250716200238129",
+          "symbol": "NIFTY25JUL25150CE",
+          "action": "BUY",
+          "quantity": 75,
+          "placement_time": 0.3510472774505615,
+          "status": "VERIFIED",
+          "avg_price": 228.7
+        }
+      ],
+      "settlement_details": {
+        "all_successful": true,
+        "settled_orders": [
+          {
+            "leg_number": 1,
+            "order_id": "250716200238114",
+            "symbol": "NIFTY25JUL25150PE",
+            "action": "BUY",
+            "quantity": 75,
+            "placement_time": 0.24997806549072266,
+            "status": "VERIFIED",
+            "avg_price": 195.7
+          },
+          {
+            "leg_number": 2,
+            "order_id": "250716200238129",
+            "symbol": "NIFTY25JUL25150CE",
+            "action": "BUY",
+            "quantity": 75,
+            "placement_time": 0.3510472774505615,
+            "status": "VERIFIED",
+            "avg_price": 228.7
+          }
+        ],
+        "failed_orders": [],
+        "partial_fills": [],
+        "success_rate": 1.0
+      },
+      "message": "All 2 legs executed successfully"
+    },
+    "trade_id": "TRADE_20250716_094809_3",
+    "status": "CLOSED",
+    "entry_time": "2025-07-16T09:48:09.245683",
+    "last_updated": "2025-07-16T15:15:50.654385",
+    "pnl": "Square-off (time or emergency)",
+    "exit_time": "2025-07-16T15:15:50.654491",
+    "exit_reason": null,
+    "exit_price": null
+  },
+  "TRADE_20250716_093215_2": {
+    "strategy_name": "Long Straddle (Weekly)",
+    "legs": [
+      {
+        "symbol": "NIFTY25JUL25150CE",
+        "action": "BUY",
+        "quantity": 75,
+        "strike": 25150.0,
+        "option_type": "CE",
+        "price": 233.3,
+        "exchange": "NFO"
+      },
+      {
+        "symbol": "NIFTY25JUL25150PE",
+        "action": "BUY",
+        "quantity": 75,
+        "strike": 25150.0,
+        "option_type": "PE",
+        "price": 192.25,
+        "exchange": "NFO"
+      }
+    ],
+    "expiry_date": "2025-07-31",
+    "spot_price": 25145.4,
+    "strategy_type": "Long Straddle (Weekly)",
+    "risk_management": {
+      "total_premium_paid": 31916.25,
+      "max_profit": "Unlimited",
+      "max_loss": 31916.25,
+      "breakeven_points": [
+        24724.45,
+        25575.55
+      ],
+      "probability_of_profit": "Depends on movement > 425.55"
+    },
+    "analysis_data": {
+      "market_outlook": "High volatility expected, direction uncertain",
+      "strategy_metrics": {
+        "total_premium_paid": 31916.25,
+        "max_profit": "Unlimited",
+        "max_loss": 31916.25,
+        "breakeven_points": [
+          24724.45,
+          25575.55
+        ],
+        "probability_of_profit": "Depends on movement > 425.55"
+      },
+      "atm_strike": 25150.0,
+      "creation_timestamp": "2025-07-16T09:32:00.288963"
+    },
+    "execution_details": {
+      "status": "BASKET_SUCCESS",
+      "total_legs": 2,
+      "execution_time": 15.360360860824585,
+      "order_results": [
+        {
+          "leg_number": 1,
+          "order_id": "250716200160188",
+          "symbol": "NIFTY25JUL25150PE",
+          "action": "BUY",
+          "quantity": 75,
+          "placement_time": 0.15892505645751953,
+          "status": "VERIFIED",
+          "avg_price": 190.8
+        },
+        {
+          "leg_number": 2,
+          "order_id": "250716200160194",
+          "symbol": "NIFTY25JUL25150CE",
+          "action": "BUY",
+          "quantity": 75,
+          "placement_time": 0.21837687492370605,
+          "status": "VERIFIED",
+          "avg_price": 234.4
+        }
+      ],
+      "settlement_details": {
+        "all_successful": true,
+        "settled_orders": [
+          {
+            "leg_number": 1,
+            "order_id": "250716200160188",
+            "symbol": "NIFTY25JUL25150PE",
+            "action": "BUY",
+            "quantity": 75,
+            "placement_time": 0.15892505645751953,
+            "status": "VERIFIED",
+            "avg_price": 190.8
+          },
+          {
+            "leg_number": 2,
+            "order_id": "250716200160194",
+            "symbol": "NIFTY25JUL25150CE",
+            "action": "BUY",
+            "quantity": 75,
+            "placement_time": 0.21837687492370605,
+            "status": "VERIFIED",
+            "avg_price": 234.4
+          }
+        ],
+        "failed_orders": [],
+        "partial_fills": [],
+        "success_rate": 1.0
+      },
+      "message": "All 2 legs executed successfully"
+    },
+    "trade_id": "TRADE_20250716_093215_2",
+    "status": "CLOSED",
+    "entry_time": "2025-07-16T09:32:15.815518",
+    "last_updated": "2025-07-16T15:21:06.350254",
+    "pnl": "Square-off (time or emergency)",
+    "exit_time": "2025-07-16T15:21:06.350278",
+    "exit_reason": null,
+    "exit_price": null
+  },
+  "TRADE_20250728_142314_1": {
+    "strategy_name": "LONG_PUT_SCALP",
+    "legs": [
+      {
+        "symbol": "NIFTY2580724600PE",
+        "action": "BUY",
+        "quantity": 75,
+        "strike": 24600.0,
+        "option_type": "PE",
+        "price": 130.1,
+        "exchange": "NFO"
+      }
+    ],
+    "expiry_date": "2025-08-07",
+    "spot_price": null,
+    "strategy_type": null,
+    "risk_management": {
+      "stop_loss": "2%",
+      "profit_target": "10%",
+      "max_hold_time": "15 minutes"
+    },
+    "analysis_data": {},
+    "execution_details": {
+      "status": "BASKET_SUCCESS",
+      "total_legs": 1,
+      "execution_time": 15.31888198852539,
+      "order_results": [
+        {
+          "leg_number": 1,
+          "order_id": "250728101057886",
+          "symbol": "NIFTY2580724600PE",
+          "action": "BUY",
+          "quantity": 75,
+          "placement_time": 0.24266791343688965,
+          "status": "VERIFIED",
+          "avg_price": 130.15
+        }
+      ],
+      "settlement_details": {
+        "all_successful": true,
+        "settled_orders": [
+          {
+            "leg_number": 1,
+            "order_id": "250728101057886",
+            "symbol": "NIFTY2580724600PE",
+            "action": "BUY",
+            "quantity": 75,
+            "placement_time": 0.24266791343688965,
+            "status": "VERIFIED",
+            "avg_price": 130.15
+          }
+        ],
+        "failed_orders": [],
+        "partial_fills": [],
+        "success_rate": 1.0
+      },
+      "message": "All 1 legs executed successfully"
+    },
+    "trade_id": "TRADE_20250728_142314_1",
+    "status": "CLOSED",
+    "entry_time": "2025-07-28T14:23:14.299957",
+    "last_updated": "2025-07-28T22:12:42.247149",
+    "pnl": 945.0,
+    "exit_time": "2025-07-28T22:12:42.247168",
+    "exit_reason": "Test close",
+    "exit_price": 138.5
+  },
+  "TRADE_20250729_103130_1": {
+    "strategy_name": "LONG_PUT_SCALP",
+    "legs": [
+      {
+        "symbol": "NIFTY2580724550PE",
+        "action": "BUY",
+        "quantity": 75,
+        "strike": 24550.0,
+        "option_type": "PE",
+        "price": 123.65,
+        "exchange": "NFO"
+      }
+    ],
+    "expiry_date": "2025-08-07",
+    "spot_price": null,
+    "strategy_type": null,
+    "risk_management": {
+      "stop_loss": "2%",
+      "profit_target": "10%",
+      "max_hold_time": "15 minutes"
+    },
+    "analysis_data": {},
+    "execution_details": {
+      "status": "BASKET_SUCCESS",
+      "total_legs": 1,
+      "execution_time": 15.2673180103302,
+      "order_results": [
+        {
+          "leg_number": 1,
+          "order_id": "250729200431964",
+          "symbol": "NIFTY2580724550PE",
+          "action": "BUY",
+          "quantity": 75,
+          "placement_time": 0.178070068359375,
+          "status": "VERIFIED",
+          "avg_price": 123.75
+        }
+      ],
+      "settlement_details": {
+        "all_successful": true,
+        "settled_orders": [
+          {
+            "leg_number": 1,
+            "order_id": "250729200431964",
+            "symbol": "NIFTY2580724550PE",
+            "action": "BUY",
+            "quantity": 75,
+            "placement_time": 0.178070068359375,
+            "status": "VERIFIED",
+            "avg_price": 123.75
+          }
+        ],
+        "failed_orders": [],
+        "partial_fills": [],
+        "success_rate": 1.0
+      },
+      "message": "All 1 legs executed successfully"
+    },
+    "trade_id": "TRADE_20250729_103130_1",
+    "status": "ACTIVE",
+    "entry_time": "2025-07-29T10:31:30.810139",
+    "last_updated": "2025-07-29T10:31:30.810148",
+    "pnl": 0.0,
+    "exit_time": null,
+    "exit_reason": null,
+    "exit_price": null
+  },
+  "TRADE_20250729_105113_1": {
+    "strategy_name": "LONG_PUT_SCALP",
+    "legs": [
+      {
+        "symbol": "NIFTY2580724550PE",
+        "action": "BUY",
+        "quantity": 75,
+        "strike": 24550.0,
+        "option_type": "PE",
+        "price": 127.45,
+        "exchange": "NFO"
+      }
+    ],
+    "expiry_date": "2025-08-07",
+    "spot_price": null,
+    "strategy_type": null,
+    "risk_management": {
+      "stop_loss": "6%",
+      "profit_target": "8%",
+      "max_hold_time": "15 minutes",
+      "min_hold_time": "3 minutes"
+    },
+    "analysis_data": {},
+    "execution_details": {
+      "status": "BASKET_SUCCESS",
+      "total_legs": 1,
+      "execution_time": 15.353028059005737,
+      "order_results": [
+        {
+          "leg_number": 1,
+          "order_id": "250729200501180",
+          "symbol": "NIFTY2580724550PE",
+          "action": "BUY",
+          "quantity": 75,
+          "placement_time": 0.239854097366333,
+          "status": "VERIFIED",
+          "avg_price": 127.2
+        }
+      ],
+      "settlement_details": {
+        "all_successful": true,
+        "settled_orders": [
+          {
+            "leg_number": 1,
+            "order_id": "250729200501180",
+            "symbol": "NIFTY2580724550PE",
+            "action": "BUY",
+            "quantity": 75,
+            "placement_time": 0.239854097366333,
+            "status": "VERIFIED",
+            "avg_price": 127.2
+          }
+        ],
+        "failed_orders": [],
+        "partial_fills": [],
+        "success_rate": 1.0
+      },
+      "message": "All 1 legs executed successfully"
+    },
+    "trade_id": "TRADE_20250729_105113_1",
+    "status": "ACTIVE",
+    "entry_time": "2025-07-29T10:51:13.549143",
+    "last_updated": "2025-07-29T10:51:13.549146",
+    "pnl": 0.0,
+    "exit_time": null,
+    "exit_reason": null,
+    "exit_price": null
+  },
+  "TRADE_20250729_132240_1": {
+    "strategy_name": "LONG_CALL_SCALP",
+    "legs": [
+      {
+        "symbol": "NIFTY2580724850CE",
+        "action": "BUY",
+        "quantity": 75,
+        "strike": 24850.0,
+        "option_type": "CE",
+        "price": 143.3,
+        "exchange": "NFO"
+      }
+    ],
+    "expiry_date": "2025-08-07",
+    "spot_price": null,
+    "strategy_type": null,
+    "risk_management": {
+      "stop_loss": "6%",
+      "profit_target": "8%",
+      "max_hold_time": "15 minutes",
+      "min_hold_time": "3 minutes"
+    },
+    "analysis_data": {},
+    "execution_details": {
+      "status": "BASKET_SUCCESS",
+      "total_legs": 1,
+      "execution_time": 15.455224990844727,
+      "order_results": [
+        {
+          "leg_number": 1,
+          "order_id": "250729200918905",
+          "symbol": "NIFTY2580724850CE",
+          "action": "BUY",
+          "quantity": 75,
+          "placement_time": 0.37133002281188965,
+          "status": "VERIFIED",
+          "avg_price": 143.1
+        }
+      ],
+      "settlement_details": {
+        "all_successful": true,
+        "settled_orders": [
+          {
+            "leg_number": 1,
+            "order_id": "250729200918905",
+            "symbol": "NIFTY2580724850CE",
+            "action": "BUY",
+            "quantity": 75,
+            "placement_time": 0.37133002281188965,
+            "status": "VERIFIED",
+            "avg_price": 143.1
+          }
+        ],
+        "failed_orders": [],
+        "partial_fills": [],
+        "success_rate": 1.0
+      },
+      "message": "All 1 legs executed successfully"
+    },
+    "trade_id": "TRADE_20250729_132240_1",
+    "status": "ACTIVE",
+    "entry_time": "2025-07-29T13:22:40.277186",
+    "last_updated": "2025-07-29T13:22:40.277192",
+    "pnl": 0.0,
+    "exit_time": null,
+    "exit_reason": null,
+    "exit_price": null
+  },
+  "TRADE_20250729_133523_1": {
+    "strategy_name": "LONG_CALL_SCALP",
+    "legs": [
+      {
+        "symbol": "NIFTY2580724850CE",
+        "action": "BUY",
+        "quantity": 75,
+        "strike": 24850.0,
+        "option_type": "CE",
+        "price": 151.6,
+        "exchange": "NFO"
+      }
+    ],
+    "expiry_date": "2025-08-07",
+    "spot_price": null,
+    "strategy_type": null,
+    "risk_management": {
+      "stop_loss": "6%",
+      "profit_target": "8%",
+      "max_hold_time": "15 minutes",
+      "min_hold_time": "3 minutes"
+    },
+    "analysis_data": {},
+    "execution_details": {
+      "status": "BASKET_SUCCESS",
+      "total_legs": 1,
+      "execution_time": 15.286147117614746,
+      "order_results": [
+        {
+          "leg_number": 1,
+          "order_id": "250729200959285",
+          "symbol": "NIFTY2580724850CE",
+          "action": "BUY",
+          "quantity": 75,
+          "placement_time": 0.21553397178649902,
+          "status": "VERIFIED",
+          "avg_price": 151.7
+        }
+      ],
+      "settlement_details": {
+        "all_successful": true,
+        "settled_orders": [
+          {
+            "leg_number": 1,
+            "order_id": "250729200959285",
+            "symbol": "NIFTY2580724850CE",
+            "action": "BUY",
+            "quantity": 75,
+            "placement_time": 0.21553397178649902,
+            "status": "VERIFIED",
+            "avg_price": 151.7
+          }
+        ],
+        "failed_orders": [],
+        "partial_fills": [],
+        "success_rate": 1.0
+      },
+      "message": "All 1 legs executed successfully"
+    },
+    "trade_id": "TRADE_20250729_133523_1",
+    "status": "ACTIVE",
+    "entry_time": "2025-07-29T13:35:23.717894",
+    "last_updated": "2025-07-29T13:35:23.717903",
+    "pnl": 0.0,
+    "exit_time": null,
+    "exit_reason": null,
+    "exit_price": null
+  },
+  "TRADE_20250729_135405_1": {
+    "strategy_name": "LONG_CALL_SCALP",
+    "legs": [
+      {
+        "symbol": "NIFTY2580724900CE",
+        "action": "BUY",
+        "quantity": 75,
+        "strike": 24900.0,
+        "option_type": "CE",
+        "price": 139.5,
+        "exchange": "NFO"
+      }
+    ],
+    "expiry_date": "2025-08-07",
+    "spot_price": null,
+    "strategy_type": null,
+    "risk_management": {
+      "stop_loss": "6%",
+      "profit_target": "8%",
+      "max_hold_time": "15 minutes",
+      "min_hold_time": "3 minutes"
+    },
+    "analysis_data": {},
+    "execution_details": {
+      "status": "BASKET_SUCCESS",
+      "total_legs": 1,
+      "execution_time": 15.306404113769531,
+      "order_results": [
+        {
+          "leg_number": 1,
+          "order_id": "250729201024688",
+          "symbol": "NIFTY2580724900CE",
+          "action": "BUY",
+          "quantity": 75,
+          "placement_time": 0.20878314971923828,
+          "status": "VERIFIED",
+          "avg_price": 140.3
+        }
+      ],
+      "settlement_details": {
+        "all_successful": true,
+        "settled_orders": [
+          {
+            "leg_number": 1,
+            "order_id": "250729201024688",
+            "symbol": "NIFTY2580724900CE",
+            "action": "BUY",
+            "quantity": 75,
+            "placement_time": 0.20878314971923828,
+            "status": "VERIFIED",
+            "avg_price": 140.3
+          }
+        ],
+        "failed_orders": [],
+        "partial_fills": [],
+        "success_rate": 1.0
+      },
+      "message": "All 1 legs executed successfully"
+    },
+    "trade_id": "TRADE_20250729_135405_1",
+    "status": "ACTIVE",
+    "entry_time": "2025-07-29T13:54:05.750494",
+    "last_updated": "2025-07-29T13:54:05.750509",
+    "pnl": 0.0,
+    "exit_time": null,
+    "exit_reason": null,
+    "exit_price": null
+  },
+  "TRADE_20250729_140446_1": {
+    "strategy_name": "LONG_CALL_SCALP",
+    "legs": [
+      {
+        "symbol": "NIFTY2580724900CE",
+        "action": "BUY",
+        "quantity": 75,
+        "strike": 24900.0,
+        "option_type": "CE",
+        "price": 150.7,
+        "exchange": "NFO"
+      }
+    ],
+    "expiry_date": "2025-08-07",
+    "spot_price": null,
+    "strategy_type": null,
+    "risk_management": {
+      "stop_loss": "6%",
+      "profit_target": "8%",
+      "max_hold_time": "15 minutes",
+      "min_hold_time": "3 minutes"
+    },
+    "analysis_data": {},
+    "execution_details": {
+      "status": "BASKET_SUCCESS",
+      "total_legs": 1,
+      "execution_time": 15.383584976196289,
+      "order_results": [
+        {
+          "leg_number": 1,
+          "order_id": "250729201072007",
+          "symbol": "NIFTY2580724900CE",
+          "action": "BUY",
+          "quantity": 75,
+          "placement_time": 0.23685288429260254,
+          "status": "VERIFIED",
+          "avg_price": 151.4
+        }
+      ],
+      "settlement_details": {
+        "all_successful": true,
+        "settled_orders": [
+          {
+            "leg_number": 1,
+            "order_id": "250729201072007",
+            "symbol": "NIFTY2580724900CE",
+            "action": "BUY",
+            "quantity": 75,
+            "placement_time": 0.23685288429260254,
+            "status": "VERIFIED",
+            "avg_price": 151.4
+          }
+        ],
+        "failed_orders": [],
+        "partial_fills": [],
+        "success_rate": 1.0
+      },
+      "message": "All 1 legs executed successfully"
+    },
+    "trade_id": "TRADE_20250729_140446_1",
+    "status": "ACTIVE",
+    "entry_time": "2025-07-29T14:04:46.493541",
+    "last_updated": "2025-07-29T14:04:46.493549",
+    "pnl": 0.0,
+    "exit_time": null,
+    "exit_reason": null,
+    "exit_price": null
+  },
+  "TRADE_20250729_142328_1": {
+    "strategy_name": "LONG_PUT_SCALP",
+    "legs": [
+      {
+        "symbol": "NIFTY2580724700PE",
+        "action": "BUY",
+        "quantity": 75,
+        "strike": 24700.0,
+        "option_type": "PE",
+        "price": 107.3,
+        "exchange": "NFO"
+      }
+    ],
+    "expiry_date": "2025-08-07",
+    "spot_price": null,
+    "strategy_type": null,
+    "risk_management": {
+      "stop_loss": "6%",
+      "profit_target": "8%",
+      "max_hold_time": "15 minutes",
+      "min_hold_time": "3 minutes"
+    },
+    "analysis_data": {},
+    "execution_details": {
+      "status": "BASKET_SUCCESS",
+      "total_legs": 1,
+      "execution_time": 15.296996116638184,
+      "order_results": [
+        {
+          "leg_number": 1,
+          "order_id": "250729201140361",
+          "symbol": "NIFTY2580724700PE",
+          "action": "BUY",
+          "quantity": 75,
+          "placement_time": 0.22611713409423828,
+          "status": "VERIFIED",
+          "avg_price": 107.4
+        }
+      ],
+      "settlement_details": {
+        "all_successful": true,
+        "settled_orders": [
+          {
+            "leg_number": 1,
+            "order_id": "250729201140361",
+            "symbol": "NIFTY2580724700PE",
+            "action": "BUY",
+            "quantity": 75,
+            "placement_time": 0.22611713409423828,
+            "status": "VERIFIED",
+            "avg_price": 107.4
+          }
+        ],
+        "failed_orders": [],
+        "partial_fills": [],
+        "success_rate": 1.0
+      },
+      "message": "All 1 legs executed successfully"
+    },
+    "trade_id": "TRADE_20250729_142328_1",
+    "status": "ACTIVE",
+    "entry_time": "2025-07-29T14:23:28.932073",
+    "last_updated": "2025-07-29T14:23:28.932084",
+    "pnl": 0.0,
+    "exit_time": null,
+    "exit_reason": null,
+    "exit_price": null
+  },
+  "TRADE_20250729_143809_1": {
+    "strategy_name": "LONG_CALL_SCALP",
+    "legs": [
+      {
+        "symbol": "NIFTY2580724900CE",
+        "action": "BUY",
+        "quantity": 75,
+        "strike": 24900.0,
+        "option_type": "CE",
+        "price": 143.85,
+        "exchange": "NFO"
+      }
+    ],
+    "expiry_date": "2025-08-07",
+    "spot_price": null,
+    "strategy_type": null,
+    "risk_management": {
+      "stop_loss": "6%",
+      "profit_target": "8%",
+      "max_hold_time": "15 minutes",
+      "min_hold_time": "3 minutes"
+    },
+    "analysis_data": {},
+    "execution_details": {
+      "status": "BASKET_SUCCESS",
+      "total_legs": 1,
+      "execution_time": 15.3226318359375,
+      "order_results": [
+        {
+          "leg_number": 1,
+          "order_id": "250729201199510",
+          "symbol": "NIFTY2580724900CE",
+          "action": "BUY",
+          "quantity": 75,
+          "placement_time": 0.21051788330078125,
+          "status": "VERIFIED",
+          "avg_price": 143.85
+        }
+      ],
+      "settlement_details": {
+        "all_successful": true,
+        "settled_orders": [
+          {
+            "leg_number": 1,
+            "order_id": "250729201199510",
+            "symbol": "NIFTY2580724900CE",
+            "action": "BUY",
+            "quantity": 75,
+            "placement_time": 0.21051788330078125,
+            "status": "VERIFIED",
+            "avg_price": 143.85
+          }
+        ],
+        "failed_orders": [],
+        "partial_fills": [],
+        "success_rate": 1.0
+      },
+      "message": "All 1 legs executed successfully"
+    },
+    "trade_id": "TRADE_20250729_143809_1",
+    "status": "ACTIVE",
+    "entry_time": "2025-07-29T14:38:09.780178",
+    "last_updated": "2025-07-29T14:38:09.780193",
+    "pnl": 0.0,
+    "exit_time": null,
+    "exit_reason": null,
+    "exit_price": null
+  },
+  "TRADE_20250729_145503_1": {
+    "strategy_name": "LONG_CALL_SCALP",
+    "legs": [
+      {
+        "symbol": "NIFTY2580724900CE",
+        "action": "BUY",
+        "quantity": 75,
+        "strike": 24900.0,
+        "option_type": "CE",
+        "price": 140.6,
+        "exchange": "NFO"
+      }
+    ],
+    "expiry_date": "2025-08-07",
+    "spot_price": null,
+    "strategy_type": null,
+    "risk_management": {
+      "stop_loss": "6%",
+      "profit_target": "8%",
+      "max_hold_time": "15 minutes",
+      "min_hold_time": "3 minutes"
+    },
+    "analysis_data": {},
+    "execution_details": {
+      "status": "BASKET_SUCCESS",
+      "total_legs": 1,
+      "execution_time": 15.457494020462036,
+      "order_results": [
+        {
+          "leg_number": 1,
+          "order_id": "250729201269356",
+          "symbol": "NIFTY2580724900CE",
+          "action": "BUY",
+          "quantity": 75,
+          "placement_time": 0.3753831386566162,
+          "status": "VERIFIED",
+          "avg_price": 141.05
+        }
+      ],
+      "settlement_details": {
+        "all_successful": true,
+        "settled_orders": [
+          {
+            "leg_number": 1,
+            "order_id": "250729201269356",
+            "symbol": "NIFTY2580724900CE",
+            "action": "BUY",
+            "quantity": 75,
+            "placement_time": 0.3753831386566162,
+            "status": "VERIFIED",
+            "avg_price": 141.05
+          }
+        ],
+        "failed_orders": [],
+        "partial_fills": [],
+        "success_rate": 1.0
+      },
+      "message": "All 1 legs executed successfully"
+    },
+    "trade_id": "TRADE_20250729_145503_1",
+    "status": "ACTIVE",
+    "entry_time": "2025-07-29T14:55:03.205918",
+    "last_updated": "2025-07-29T14:55:03.205933",
+    "pnl": 0.0,
+    "exit_time": null,
+    "exit_reason": null,
+    "exit_price": null
   }
 }

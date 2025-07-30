@@ -1,0 +1,21 @@
+{
+  "timestamp": "2025-07-30 05:23:18 IST",
+  "market_conditions": {},
+  "opportunity_hunter": {},
+  "position_manager": {
+    "active_positions_count": 0,
+    "active_trades_count": 0,
+    "positions": [],
+    "active_trades": {}
+  },
+  "active_positions": [],
+  "recent_trades": [],
+  "system_status": {
+    "market_open": false,
+    "data_files_exist": {
+      "indicator_history": true,
+      "intended_trades": false
+    },
+    "last_update": "2025-07-30 05:23:18 IST"
+  }
+}

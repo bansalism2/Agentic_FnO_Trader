@@ -183,11 +183,162 @@ except Exception as e:
 
 # === FAST-TRACK ANALYSIS & STRATEGY SELECTION IMPROVEMENTS ===
 
+def refined_emergency_strategy_selection(emergency_signal_type):
+    """
+    Refined emergency strategy selection - clean and practical approach
+    """
+    try:
+        print(f"🎯 REFINED STRATEGY SELECTION:")
+        print(f"   Emergency Signal: {emergency_signal_type}")
+        
+        # COMMENTED OUT: Low IV emergency logic removed - Low IV is common and not truly "emergency"
+        # if 'LOW_IV' in emergency_signal_type:
+        #     # LOW IV = Cheap options = Take advantage with long strategies
+        #     technical = get_nifty_technical_analysis_tool()
+        #     signal = technical.get('signal', 'NEUTRAL')
+        #     rsi = technical.get('rsi', 50)
+        #     
+        #     print(f"   Technical Signal: {signal} (RSI: {rsi:.1f})")
+        #     
+        #     # Strong directional signals with confirmation
+        #     if signal == 'STRONG_BUY' and rsi < 70:  # Not overbought
+        #         strategy = 'Long Call'
+        #         reasoning = "Low IV + Strong bullish signal = Long Call"
+        #         
+        #     elif signal == 'STRONG_SELL' and rsi > 30:  # Not oversold
+        #         strategy = 'Long Put'  
+        #         reasoning = "Low IV + Strong bearish signal = Long Put"
+        #         
+        #     else:
+        #         # No clear direction or conflicting signals
+        #         strategy = 'Long Straddle'
+        #         reasoning = "Low IV + Neutral/weak signal = Long Straddle"
+        #         
+        #     print(f"   ✅ LOW IV Strategy: {strategy}")
+        #     print(f"   💡 Reasoning: {reasoning}")
+            
+        if 'HIGH_IV' in emergency_signal_type:
+            # HIGH IV = Expensive options = Prefer safe hedged selling
+            strategy = 'Iron Condor'
+            reasoning = "High IV + Emergency = Conservative hedged selling (Iron Condor)"
+            
+            print(f"   ✅ HIGH IV Strategy: {strategy}")
+            print(f"   💡 Reasoning: {reasoning}")
+            
+        else:
+            # Unknown signal or mixed conditions = Conservative default
+            strategy = 'Iron Condor'
+            reasoning = "Unknown/mixed conditions = Conservative default (Iron Condor)"
+            
+            print(f"   ✅ DEFAULT Strategy: {strategy}")
+            print(f"   💡 Reasoning: {reasoning}")
+        
+        return {
+            'strategy': strategy,
+            'reasoning': reasoning,
+            'signal_type': emergency_signal_type
+        }
+        
+    except Exception as e:
+        print(f"❌ Error in strategy selection: {e}")
+        # Ultra-safe fallback
+        return {
+            'strategy': 'Iron Condor',
+            'reasoning': 'Error occurred - using ultra-safe fallback',
+            'signal_type': 'ERROR'
+        }
+
+
+# COMMENTED OUT: Low IV emergency functions removed - Low IV is common and not truly "emergency"
+# def create_long_call_emergency(expiry_date, spot_price, quantity=75):
+#     """
+#     Create Long Call for emergency execution in low IV environment
+#     """
+#     try:
+#         options_chain = get_options_chain_safe(expiry_date=expiry_date)
+#         if not options_chain or options_chain.get('status') != 'SUCCESS':
+#             return {'status': 'FAILED', 'reason': 'Could not get options chain'}
+#         chain_data = options_chain.get('options_chain', [])
+#         target_strike = None
+#         for option in chain_data:
+#             strike = option.get('strike', 0)
+#             if strike > spot_price + 50 and strike <= spot_price + 100:
+#                 if option.get('CE_ltp', 0) > 0:
+#                     target_strike = strike
+#                     break
+#         if not target_strike:
+#             return {'status': 'FAILED', 'reason': 'Could not find suitable call option'}
+#         call_option = next((opt for opt in chain_data if opt['strike'] == target_strike), None)
+#         if not call_option:
+#             return {'status': 'FAILED', 'reason': 'Target strike not found'}
+#         legs = [{
+#             'symbol': call_option.get('CE_symbol', ''),
+#             'action': 'BUY',
+#             'quantity': quantity,
+#             'strike': target_strike,
+#             'option_type': 'CE',
+#             'price': call_option.get('CE_ltp', 0)
+#         }]
+#         return {
+#             'status': 'SUCCESS',
+#             'strategy_name': 'Long Call',
+#             'legs': legs,
+#             'expiry_date': expiry_date,
+#             'target_strike': target_strike
+#         }
+#     except Exception as e:
+#         return {'status': 'FAILED', 'reason': f'Long Call creation failed: {str(e)}'}
+
+
+# def create_long_put_emergency(expiry_date, spot_price, quantity=75):
+#     """
+#     Create Long Put for emergency execution in low IV environment
+#     """
+#     try:
+#         options_chain = get_options_chain_safe(expiry_date=expiry_date)
+#         if not options_chain or options_chain.get('status') != 'SUCCESS':
+#             return {'status': 'FAILED', 'reason': 'Could not get options chain'}
+#         chain_data = options_chain.get('options_chain', [])
+#         target_strike = None
+#         for option in reversed(chain_data):
+#             strike = option.get('strike', 0)
+#             if strike < spot_price - 50 and strike >= spot_price - 100:
+#                 if option.get('PE_ltp', 0) > 0:
+#                     target_strike = strike
+#                     break
+#         if not target_strike:
+#             return {'status': 'FAILED', 'reason': 'Could not find suitable put option'}
+#         put_option = next((opt for opt in chain_data if opt['strike'] == target_strike), None)
+#         if not put_option:
+#             return {'status': 'FAILED', 'reason': 'Target strike not found'}
+#         legs = [{
+#             'symbol': put_option.get('PE_symbol', ''),
+#             'action': 'BUY',
+#             'quantity': quantity,
+#             'strike': target_strike,
+#             'option_type': 'PE',
+#             'price': put_option.get('PE_ltp', 0)
+#         }]
+#         return {
+#             'status': 'SUCCESS',
+#             'strategy_name': 'Long Put',
+#             'legs': legs,
+#             'expiry_date': expiry_date,
+#             'target_strike': target_strike
+#         }
+#     except Exception as e:
+#         return {'status': 'FAILED', 'reason': f'Long Put creation failed: {str(e)}'}
+
 def emergency_fast_track():
     """
     Enhanced emergency fast-track with comprehensive IV analysis including realized volatility and liquidity
     """
     try:
+        # Import required modules for timezone handling
+        from datetime import datetime
+        import pytz
+        IST_TIMEZONE = pytz.timezone('Asia/Kolkata')
+        
         print("🚨 ENHANCED EMERGENCY FAST-TRACK WITH REALIZED VOLATILITY & LIQUIDITY:")
         
         # Get basic market data
@@ -205,7 +356,7 @@ def emergency_fast_track():
         # Get PCR analysis for market sentiment validation
         pcr_analysis = calculate_pcr_technical_analysis_wrapper()
         pcr_extremes = analyze_pcr_extremes_wrapper()
-        print(f"📊 PCR Technical: {pcr_analysis.get('signal', 'N/A')} (PCR: {pcr_analysis.get('pcr_value', 'N/A')})")
+        print(f"📊 PCR Technical: {pcr_analysis.get('entry_signal', 'N/A')} (PCR: {pcr_analysis.get('put_call_ratio', 'N/A')})")
         print(f"📊 PCR Extremes: {pcr_extremes.get('extreme_signal', 'N/A')}")
         
         # Enhanced IV analysis with realized volatility and liquidity
@@ -245,13 +396,14 @@ def emergency_fast_track():
                     print(f"🚨 HIGH IV EMERGENCY: IV={current_iv:.4f}, Fairly Priced")
             
             # Check for low IV opportunity (more conservative thresholds)
-            elif current_iv < 0.08 and iv_percentile < 0.15:  # Much more conservative
-                if realized_vol and current_iv / realized_vol < 0.6:  # More stringent underpriced check
-                    emergency_signal = 'LOW_IV_UNDERPRICED'
-                    print(f"🚨 LOW IV OPPORTUNITY: IV={current_iv:.4f}, Underpriced vs Realized")
-                else:
-                    emergency_signal = 'LOW_IV_FAIR'
-                    print(f"🚨 LOW IV OPPORTUNITY: IV={current_iv:.4f}, Fairly Priced")
+            # COMMENTED OUT: Low IV is common and not truly "emergency"
+            # elif current_iv < 0.08 and iv_percentile < 0.15:  # Much more conservative
+            #     if realized_vol and current_iv / realized_vol < 0.6:  # More stringent underpriced check
+            #         emergency_signal = 'LOW_IV_UNDERPRICED'
+            #         print(f"🚨 LOW IV OPPORTUNITY: IV={current_iv:.4f}, Underpriced vs Realized")
+            #     else:
+            #         emergency_signal = 'LOW_IV_FAIR'
+            #         print(f"🚨 LOW IV OPPORTUNITY: IV={current_iv:.4f}, Fairly Priced")
             
             # Check liquidity constraints
             if liquidity_analysis.get('status') == 'SUCCESS':
@@ -265,16 +417,17 @@ def emergency_fast_track():
                         print(f"⚠️  POOR LIQUIDITY ONLY: Score={liquidity_score}/100")
             
             # PCR confirmation logic
-            pcr_signal = pcr_analysis.get('signal', '').upper()
+            pcr_signal = pcr_analysis.get('entry_signal', '').upper()
             pcr_extreme = (pcr_extremes.get('extreme_signal', '') or '').upper()
             if emergency_signal.startswith('HIGH_IV'):
                 if pcr_signal == 'STRONG_BUY' or pcr_extreme == 'EXTREME_BULL':
                     print(f"❌ PCR BLOCK: HIGH_IV emergency blocked due to bullish PCR ({pcr_signal}, {pcr_extreme})")
                     emergency_signal = 'NO_EMERGENCY_PCR_BLOCKED'
-            elif emergency_signal.startswith('LOW_IV'):
-                if pcr_signal == 'STRONG_SELL' or pcr_extreme == 'EXTREME_BEAR':
-                    print(f"❌ PCR BLOCK: LOW_IV emergency blocked due to bearish PCR ({pcr_signal}, {pcr_extreme})")
-                    emergency_signal = 'NO_EMERGENCY_PCR_BLOCKED'
+            # COMMENTED OUT: Low IV emergency logic removed
+            # elif emergency_signal.startswith('LOW_IV'):
+            #     if pcr_signal == 'STRONG_SELL' or pcr_extreme == 'EXTREME_BEAR':
+            #         print(f"❌ PCR BLOCK: LOW_IV emergency blocked due to bearish PCR ({pcr_signal}, {pcr_extreme})")
+            #         emergency_signal = 'NO_EMERGENCY_PCR_BLOCKED'
             
             return {
                 'status': 'SUCCESS',
@@ -284,10 +437,10 @@ def emergency_fast_track():
                 'realized_volatility': realized_vol,
                 'liquidity_score': liquidity_analysis.get('liquidity_metrics', {}).get('overall_liquidity_score', 0) if liquidity_analysis.get('status') == 'SUCCESS' else None,
                 'spot_price': spot_price,
-                'pcr_signal': pcr_analysis.get('signal', None),
-                'pcr_value': pcr_analysis.get('pcr_value', None),
+                'pcr_signal': pcr_analysis.get('entry_signal', None),
+                'pcr_value': pcr_analysis.get('put_call_ratio', None),
                 'pcr_extreme_signal': pcr_extremes.get('extreme_signal', None),
-                'timestamp': datetime.now().isoformat()
+                'timestamp': datetime.now(IST_TIMEZONE).isoformat()
             }
         else:
             print(f"❌ IV Analysis failed: {iv_analysis.get('message', 'Unknown error')}")
@@ -355,10 +508,10 @@ def run_emergency_execution(emergency_signal):
         
         # Debug expiry analysis
         print(f"📅 Expiry Analysis: {expiry_analysis}")
-        if expiry_analysis and 'expiry_dates' in expiry_analysis:
-            print(f"📅 Available Expiries: {len(expiry_analysis['expiry_dates'])}")
-            for i, expiry in enumerate(expiry_analysis['expiry_dates'][:3]):  # Show first 3
-                print(f"   {i+1}. {expiry.get('expiry_date', 'N/A')} - {expiry.get('category', 'N/A')}")
+        if expiry_analysis and 'available_expiries' in expiry_analysis:
+            print(f"📅 Available Expiries: {len(expiry_analysis['available_expiries'])}")
+            for i, expiry in enumerate(expiry_analysis['available_expiries'][:3]):  # Show first 3
+                print(f"   {i+1}. {expiry.get('date', 'N/A')} - {expiry.get('category', 'N/A')}")
         else:
             print("❌ No expiry analysis data available")
         
@@ -375,57 +528,42 @@ def run_emergency_execution(emergency_signal):
         # Get options chain
         options_chain = get_options_chain_safe(expiry_date=chosen_expiry)
         
-        # Determine strategy based on emergency signal type for HEDGED selling
         emergency_signal_type = emergency_signal.get('emergency_signal', 'UNKNOWN')
-        
         print(f"🔍 DEBUG: Emergency signal type = {emergency_signal_type}")
         print(f"🔍 DEBUG: Full emergency signal = {emergency_signal}")
         
-        # Map emergency signals to appropriate HEDGED selling strategies
-        if 'LOW_IV' in emergency_signal_type:
-            # For LOW IV environments, use Iron Condor (hedged premium selling)
-            strategy = 'Iron Condor'  # Hedged selling, good for low IV environments
-            print(f"🎯 DEBUG: LOW IV detected -> Iron Condor selected")
-        elif 'HIGH_IV' in emergency_signal_type:
-            # For HIGH IV environments, use Short Strangle (hedged premium selling)
-            strategy = 'Short Strangle'
-            print(f"🎯 DEBUG: HIGH IV detected -> Short Strangle selected")
-        else:
-            # Default to Iron Condor for safety (hedged selling)
-            strategy = 'Iron Condor'
-            print(f"🎯 DEBUG: Unknown signal -> Iron Condor selected (default)")
-        
-        print(f"🎯 DEBUG: Final strategy selected = {strategy}")
-        print(f"🎯 DEBUG: Strategy will be passed to execute_emergency_strategy as: {strategy}")
-        
-        emergency_level = emergency_signal.get('emergency_level', 'MEDIUM')
-        
         # Conservative parameters for emergency execution
-        if emergency_level == 'HIGH':
-            # Very conservative for extreme conditions
+        if emergency_signal.get('emergency_level', 'MEDIUM') == 'HIGH':
             risk_per_trade = 0.5  # 0.5% of capital
             max_width = 200  # Narrow spreads
         else:
-            # Standard conservative parameters
             risk_per_trade = 1.0  # 1% of capital
             max_width = 300  # Standard spreads
         
-        # Execute strategy with conservative parameters
+        # Execute strategy with refined logic
         execution_result = execute_emergency_strategy(
-            strategy=strategy,
+            strategy=None,  # Not used anymore
             spot_price=spot_price,
             expiry_date=chosen_expiry,
             options_chain=options_chain,
             risk_per_trade=risk_per_trade,
             max_width=max_width,
-            emergency_level=emergency_level,
-            emergency_signal_type=emergency_signal_type  # Pass the signal type
+            emergency_level=emergency_signal.get('emergency_level', 'MEDIUM'),
+            emergency_signal_type=emergency_signal_type
         )
         
+        # Check if execution was successful (handle multiple success statuses)
+        execution_status = execution_result.get('status', 'UNKNOWN')
+        success_statuses = ['SUCCESS', 'BASKET_SUCCESS', 'PARTIAL_SUCCESS', 'EXECUTED']
+        if execution_status in success_statuses:
+            decision = 'EMERGENCY_EXECUTION_COMPLETE'
+        else:
+            decision = 'EMERGENCY_EXECUTION_FAILED'
+        
         return {
-            'decision': 'EMERGENCY_EXECUTION_COMPLETE',
-            'strategy': strategy,
-            'emergency_level': emergency_level,
+            'decision': decision,
+            'strategy': execution_result.get('strategy_name', 'Unknown'),
+            'emergency_level': emergency_signal.get('emergency_level', 'MEDIUM'),
             'execution_result': execution_result,
             'reason': emergency_signal.get('reason', 'Emergency conditions detected'),
             'token_efficiency': 'HIGH - Emergency execution used ~300 tokens'
@@ -441,104 +579,84 @@ def run_emergency_execution(emergency_signal):
 
 def execute_emergency_strategy(strategy, spot_price, expiry_date, options_chain, risk_per_trade, max_width, emergency_level, emergency_signal_type):
     """
-    Execute emergency strategy with conservative parameters
-    
-    Args:
-        strategy (str): Strategy to execute
-        spot_price (float): Current spot price
-        expiry_date (str): Expiry date
-        options_chain (dict): Options chain data
-        risk_per_trade (float): Risk per trade as % of capital
-        max_width (int): Maximum width for spreads
-        emergency_level (str): Emergency level (HIGH/MEDIUM)
-        emergency_signal_type (str): Type of emergency signal (LOW_IV_UNDERPRICED, etc.)
-        
-    Returns:
-        dict: Execution result
+    Execute emergency strategy with refined selection logic
     """
     try:
-        print(f"🚨 Executing emergency {strategy}...")
-        # Force-fix: ensure spot_price is a float
+        # === STRICT TIME CHECK: NO TRADES AFTER 2:30 PM IST ===
+        from datetime import datetime, time as dt_time
+        import pytz
+        IST_TIMEZONE = pytz.timezone('Asia/Kolkata')
+        now = datetime.now(IST_TIMEZONE)
+        if now.time() >= dt_time(14, 30):
+            print("\n⏰ Trade execution blocked: No new trades allowed after 2:30 PM IST.")
+            return {'status': 'FAILED', 'reason': 'Trade execution blocked: No new trades allowed after 2:30 PM IST.'}
+        
+        # === PROFIT TARGET CHECK: BLOCK NEW TRADES IF TARGET REACHED ===
+        import os
+        profit_target_file = "/tmp/algotrade_no_more_trades_today"
+        if os.path.exists(profit_target_file):
+            print("\n🚫 PROFIT TARGET BLOCK: Day's profit target (₹5,000) already reached. No new trades allowed.")
+            return {'status': 'FAILED', 'reason': 'Day profit target (₹5,000) reached - no new trades allowed'}
+        
+        # Use refined strategy selection
+        strategy_info = refined_emergency_strategy_selection(emergency_signal_type)
+        selected_strategy = strategy_info['strategy']
+        reasoning = strategy_info['reasoning']
+        print(f"🚨 Executing refined emergency strategy: {selected_strategy}")
+        print(f"💡 Selection reasoning: {reasoning}")
         if isinstance(spot_price, dict):
             spot_price = spot_price.get('spot_price', 0)
-        
-        # Get account margins for position sizing
         margins = get_account_margins()
         if margins.get('status') != 'SUCCESS':
             return {'status': 'FAILED', 'reason': 'Could not fetch account margins'}
-        
         capital = margins['equity'].get('live_balance', 0)
         if capital < 50000:
             return {'status': 'FAILED', 'reason': 'Insufficient capital'}
-        
-        # Calculate position size based on risk
-        risk_amount = capital * (risk_per_trade / 100)
-        
-        # Strategy-specific execution using execute_and_store_strategy
-        if strategy == 'Short Strangle':
-            # Create short strangle strategy
-            strategy_result = create_short_strangle_wrapper(
+        # COMMENTED OUT: Low IV emergency strategies removed
+        # if selected_strategy == 'Long Call':
+        #     strategy_result = create_long_call_emergency(
+        #         expiry_date=expiry_date,
+        #         spot_price=spot_price,
+        #         quantity=75
+        #     )
+        # elif selected_strategy == 'Long Put':
+        #     strategy_result = create_long_put_emergency(
+        #         expiry_date=expiry_date,
+        #         spot_price=spot_price,
+        #         quantity=75
+        #     )
+        # elif selected_strategy == 'Long Straddle':
+        if selected_strategy == 'Long Straddle':
+            strategy_result = create_long_straddle_wrapper(
                 expiry_date=expiry_date,
                 expiry_type='weekly',
-                otm_distance=100,  # Conservative OTM distance
-                quantity=75  # Updated lot size for NIFTY (March 2025 onwards)
+                quantity=75
             )
-            
-        elif strategy == 'Iron Condor':
-            # Create iron condor strategy
+        elif selected_strategy == 'Iron Condor':
             strategy_result = create_iron_condor_wrapper(
                 expiry_date=expiry_date,
                 expiry_type='weekly',
-                wing_width=100,  # Conservative wing width
-                quantity=75  # Updated lot size for NIFTY (March 2025 onwards)
+                wing_width=100,
+                quantity=75
             )
-            
-        elif strategy == 'Credit Spread':
-            # Directional credit spread based on technical signal
-            technical = get_nifty_technical_analysis_tool()
-            signal = technical.get('signal', 'NEUTRAL')
-            
-            if signal == 'STRONG_BUY':
-                # Bull put spread
-                strategy_result = create_bull_put_spread_wrapper(
-                    expiry_date=expiry_date,
-                    expiry_type='weekly',
-                    spread_width=100,  # Conservative spread width
-                    quantity=75  # Updated lot size for NIFTY (March 2025 onwards)
-                )
-            elif signal == 'STRONG_SELL':
-                # Bear call spread
-                strategy_result = create_bear_call_spread_wrapper(
-                    expiry_date=expiry_date,
-                    expiry_type='weekly',
-                    spread_width=100,  # Conservative spread width
-                    quantity=75  # Updated lot size for NIFTY (March 2025 onwards)
-                )
-            else:
-                return {'status': 'FAILED', 'reason': 'No clear directional signal for credit spread'}
-        
         else:
-            return {'status': 'FAILED', 'reason': f'Unknown emergency strategy: {strategy}'}
-        
-        # Execute and store the strategy using the proper function
+            return {'status': 'FAILED', 'reason': f'Unknown strategy: {selected_strategy}'}
         if strategy_result.get('status') == 'SUCCESS':
             from core_tools.execution_portfolio_tools import execute_and_store_strategy
-            
-            # Add emergency metadata dynamically
-            strategy_result['emergency_level'] = emergency_level
-            strategy_result['emergency_signal'] = emergency_signal_type  # Use the passed signal type
-            strategy_result['execution_time'] = datetime.now().isoformat()
-            
-            # Execute and store the strategy
+            strategy_result.update({
+                'emergency_level': emergency_level,
+                'emergency_signal': emergency_signal_type,
+                'execution_time': datetime.now(IST_TIMEZONE).isoformat(),
+                'strategy_reasoning': reasoning,
+                'selection_logic': 'refined_emergency'
+            })
             result = execute_and_store_strategy(
                 strategy_legs=strategy_result.get('legs', []),
                 trade_metadata=strategy_result
             )
         else:
             result = strategy_result
-        
         return result
-        
     except Exception as e:
         print(f"❌ Emergency strategy execution failed: {e}")
         return {'status': 'FAILED', 'reason': f'Execution error: {str(e)}'}
@@ -669,7 +787,7 @@ def run_detailed_analysis():
         print(f"   ✅ Spot Price: {spot_price.get('spot_price', 'N/A') if spot_price else 'N/A'}")
         
         expiry_analysis = get_available_expiry_dates_with_analysis()
-        print(f"   ✅ Expiry Analysis: {len(expiry_analysis.get('expiry_dates', [])) if expiry_analysis else 0} expiries")
+        print(f"   ✅ Expiry Analysis: {len(expiry_analysis.get('available_expiries', [])) if expiry_analysis else 0} expiries")
         
         # Select appropriate expiry
         print("📅 Step 2: Expiry Selection...")
@@ -767,18 +885,18 @@ def select_optimal_expiry(expiry_analysis):
         
         # Handle different data structures
         expiry_list = None
-        if 'expiry_dates' in expiry_analysis:
-            expiry_list = expiry_analysis['expiry_dates']
-        elif 'available_expiries' in expiry_analysis:
+        if 'available_expiries' in expiry_analysis:
             expiry_list = expiry_analysis['available_expiries']
         elif 'recommended_expiries' in expiry_analysis:
             expiry_list = expiry_analysis['recommended_expiries']
+        elif 'expiry_dates' in expiry_analysis:
+            expiry_list = expiry_analysis['expiry_dates']
         
         if not expiry_list:
             return None
         
         # Determine field names based on data structure
-        date_field = 'expiry_date' if 'expiry_date' in expiry_list[0] else 'date'
+        date_field = 'date' if 'date' in expiry_list[0] else 'expiry_date'
         
         # Prefer MEDIUM_TERM expiries (8-14 days) for most strategies
         for expiry_info in expiry_list:
@@ -1740,19 +1858,24 @@ def create_emergency_summary(emergency_result):
     print("🚨 EMERGENCY EXECUTION SUMMARY")
     print("="*80)
     
+    # Check if execution was successful (handle multiple success statuses)
+    execution_result = emergency_result.get('execution_result', {})
+    execution_status = execution_result.get('status', 'UNKNOWN')
+    success_statuses = ['SUCCESS', 'BASKET_SUCCESS', 'PARTIAL_SUCCESS', 'EXECUTED']
+    is_successful = execution_status in success_statuses
+    
     # Determine the type of opportunity based on the reason
     reason = emergency_result.get('reason', 'No reason provided')
-    if 'LOW_IV' in reason:
-        opportunity_type = "low IV opportunity"
-        benefit_description = "maximize time decay benefits while minimizing risk in low volatility environment"
-    elif 'HIGH_IV' in reason:
+    if 'HIGH_IV' in reason:
         opportunity_type = "high IV opportunity"
         benefit_description = "maximize premium selling benefits while managing volatility risk"
     else:
         opportunity_type = "time-sensitive opportunity"
         benefit_description = "maximize time decay benefits while minimizing risk"
     
-    summary = f"""
+    # Create appropriate summary based on execution status
+    if is_successful:
+        summary = f"""
 # EMERGENCY EXECUTION COMPLETED - {current_datetime}
 
 ## DECISION: EMERGENCY EXECUTION
@@ -1776,6 +1899,39 @@ def create_emergency_summary(emergency_result):
 Emergency execution completed successfully. The system identified a {opportunity_type} and executed immediately with conservative parameters to {benefit_description}.
 
 **Token Efficiency**: This execution used only ~300 tokens compared to ~7,000-11,000 for full analysis.
+"""
+    else:
+        # Get failure reason
+        failure_reason = execution_result.get('message', 'Unknown error')
+        summary = f"""
+# EMERGENCY EXECUTION FAILED - {current_datetime}
+
+## DECISION: EMERGENCY EXECUTION ATTEMPTED
+
+## EXECUTION DETAILS
+- **Strategy**: {emergency_result.get('strategy', 'Unknown')}
+- **Emergency Level**: {emergency_result.get('emergency_level', 'Unknown')}
+- **Reason**: {emergency_result.get('reason', 'No reason provided')}
+- **Token Efficiency**: {emergency_result.get('token_efficiency', 'Unknown')}
+
+## EXECUTION RESULT
+{emergency_result.get('execution_result', {})}
+
+## FAILURE ANALYSIS
+- **Status**: {execution_status}
+- **Failure Reason**: {failure_reason}
+- **Impact**: No trade executed due to execution failure
+
+## EMERGENCY EXECUTION ATTEMPT BENEFITS
+1. **Speed**: Immediate attempt for time-sensitive opportunities
+2. **Efficiency**: Minimal token usage (~300 tokens)
+3. **Safety**: Conservative parameters reduce risk
+4. **Capital Preservation**: No capital risked due to execution failure
+
+## CONCLUSION
+Emergency execution was attempted but failed. The system identified a {opportunity_type} but could not execute due to: {failure_reason}. No capital was risked.
+
+**Token Efficiency**: This attempt used only ~300 tokens compared to ~7,000-11,000 for full analysis.
 """
     
     print(summary)
@@ -1837,6 +1993,18 @@ def run_enhanced_three_stage_opportunity_hunter():
     print("⏱️  Token Efficiency: Optimal for all scenarios")
     print("-" * 50)
 
+    # === PROFIT TARGET CHECK: BLOCK NEW TRADES IF TARGET REACHED ===
+    import os
+    profit_target_file = "/tmp/algotrade_no_more_trades_today"
+    if os.path.exists(profit_target_file):
+        print(f"🚫 PROFIT TARGET BLOCK: Day's profit target (₹5,000) already reached. No new trades allowed.")
+        print(f"📁 Marker file exists: {profit_target_file}")
+        return {
+            'decision': 'PROFIT_TARGET_BLOCK', 
+            'reason': 'Day profit target (₹5,000) reached - no new trades allowed',
+            'timestamp': datetime.now(IST_TIMEZONE).isoformat()
+        }
+
     # Check live balance before running
     try:
         from core_tools.execution_portfolio_tools import get_account_margins
@@ -1851,6 +2019,33 @@ def run_enhanced_three_stage_opportunity_hunter():
     except Exception as e:
         print(f"Error checking live balance: {e}. Proceeding with caution.")
 
+    # Check adjusted day profit before running any opportunity analysis
+    try:
+        from core_tools.execution_portfolio_tools import get_daily_trading_summary
+        summary_result = get_daily_trading_summary()
+        if summary_result.get('status') in ['SUCCESS', 'PARTIAL_SUCCESS']:
+            summary = summary_result.get('summary', {})
+            total_pnl = summary.get('total_pnl', 0)
+            total_positions = summary.get('total_positions', 0)
+            # For simplicity, treat all positions as open (if you have closed_positions, use that count)
+            # Adjusted profit: total_pnl - (total_positions * 2) * 30
+            adjusted_profit = total_pnl - (total_positions * 2 * 30)
+            if adjusted_profit > 5000:
+                print(f"🚫 BLOCKING NEW TRADES: Adjusted day profit (₹{adjusted_profit:.2f}) > ₹5,000. No further trades will be taken today.")
+                return {'decision': 'PROFIT_TARGET_BLOCK', 'reason': f'Adjusted day profit (₹{adjusted_profit:.2f}) > ₹5,000. No further trades today.'}
+            
+            # Log summary status for debugging
+            if summary_result.get('status') == 'PARTIAL_SUCCESS':
+                print(f"⚠️  Daily summary generated with partial data: {summary_result.get('message', 'Unknown issues')}")
+        else:
+                print(f"✅ Daily summary generated successfully")
+        else:
+            print(f"⚠️  Could not fetch daily trading summary: {summary_result.get('message', 'Unknown error')}")
+            if summary_result.get('errors'):
+                print(f"   Errors: {', '.join(summary_result.get('errors', [])[:3])}")
+    except Exception as e:
+        print(f"Error checking adjusted day profit: {e}. Proceeding with caution.")
+
     # STAGE 1: Fast-track analysis only
     fast_track_result = run_stage_1_fast_track_only()
     
@@ -1860,9 +2055,7 @@ def run_enhanced_three_stage_opportunity_hunter():
         emergency_signal = fast_track_result.get('emergency_signal', {})
         signal_type = emergency_signal.get('emergency_signal', 'UNKNOWN')
         
-        if 'LOW_IV' in signal_type:
-            print("\n🚨 EMERGENCY EXECUTION: Low IV opportunity detected")
-        elif 'HIGH_IV' in signal_type:
+        if 'HIGH_IV' in signal_type:
             print("\n🚨 EMERGENCY EXECUTION: High IV opportunity detected")
         else:
             print("\n🚨 EMERGENCY EXECUTION: Time-sensitive opportunity detected")
@@ -1873,8 +2066,8 @@ def run_enhanced_three_stage_opportunity_hunter():
         # STAGE 2: Emergency execution
         emergency_result = run_emergency_execution(emergency_signal)
         
-        # Create emergency summary
-        if emergency_result.get('decision') == 'EMERGENCY_EXECUTION_COMPLETE':
+        # Create emergency summary for both success and failure cases
+        if emergency_result.get('decision') in ['EMERGENCY_EXECUTION_COMPLETE', 'EMERGENCY_EXECUTION_FAILED']:
             result = create_emergency_summary(emergency_result)
         else:
             result = emergency_result

@@ -12,17 +12,20 @@ Usage:
     analysis = manager.get_comprehensive_analysis()
 """
 
+import sys
 import os
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
+
 import json
 import logging
 from datetime import datetime, timedelta
 from typing import Dict, Any, Optional
-import sys
 from dotenv import load_dotenv
 
 # Add current directory to path for imports
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'core_tools'))
+# sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+# sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'core_tools'))
+# sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 
 class IVDataManager:
     """
@@ -48,9 +51,10 @@ class IVDataManager:
         
         # Setup logging
         self.logger = self._setup_logging()
+        self.logger.info("IVDataManager version 2.0 initialized.")
         
         # Initialize connection if not already done
-        self._ensure_connection()
+        # self._ensure_connection()
         
     def _setup_logging(self) -> logging.Logger:
         """Setup logging for IV data manager."""
@@ -68,37 +72,12 @@ class IVDataManager:
     def _ensure_connection(self):
         """Ensure Kite Connect connection is initialized."""
         try:
-            from connect_data_tools import _kite_instance
-            if _kite_instance is None:
-                self.logger.info("Initializing Kite Connect connection...")
-                
-                # Load environment variables
-                load_dotenv(dotenv_path='../.env')
-                api_key = os.getenv("kite_api_key")
-                api_secret = os.getenv("kite_api_secret")
-                
-                # Read access token
-                access_token = None
-                try:
-                    with open("../data/access_token.txt", "r") as f:
-                        access_token = f.read().strip()
-                except Exception as e:
-                    self.logger.error(f"Could not read access token: {e}")
-                    return
-                
-                # Initialize connection
-                from connect_data_tools import initialize_connection
-                init_result = initialize_connection(api_key, api_secret, access_token)
-                
-                if init_result.get('status') == 'SUCCESS':
-                    self.logger.info("Kite Connect connection initialized successfully")
-                else:
-                    self.logger.error(f"Failed to initialize connection: {init_result.get('message', 'Unknown error')}")
-            else:
-                self.logger.info("Kite Connect connection already initialized")
-                
+            # This logic is problematic and redundant. The connection should be managed
+            # by the agent or driver script that instantiates this manager.
+            # Removing the direct dependency on a singleton _kite_instance.
+            pass
         except Exception as e:
-            self.logger.error(f"Error ensuring connection: {e}")
+            self.logger.error(f"Error in _ensure_connection (now disabled): {e}")
     
     def is_data_fresh(self, max_age_hours: int = 24) -> bool:
         """
@@ -144,10 +123,10 @@ class IVDataManager:
             self.logger.info("Refreshing historical IV data...")
             
             # Import the calculation function
-            from calculate_analysis_tools import calculate_historical_iv_data
+            from core_tools.calculate_analysis_tools import calculate_true_iv_data
             
             # Calculate new historical data
-            result = calculate_historical_iv_data(days=252)
+            result = calculate_true_iv_data(days=252)
             
             if result.get('status') == 'SUCCESS':
                 # Save last update timestamp
@@ -214,11 +193,11 @@ class IVDataManager:
                 }
             
             # Get current IV analysis
-            from calculate_analysis_tools import calculate_iv_rank_analysis_wrapper
+            from core_tools.calculate_analysis_tools import calculate_iv_rank_analysis_wrapper
             current_iv_result = calculate_iv_rank_analysis_wrapper()
             
             # Get volatility surface analysis
-            from connect_data_tools import get_nifty_spot_price_safe, get_options_chain_safe
+            from core_tools.connect_data_tools import get_nifty_spot_price_safe, get_options_chain_safe
             spot_result = get_nifty_spot_price_safe()
             options_result = get_options_chain_safe()
             
@@ -232,12 +211,12 @@ class IVDataManager:
             options_chain = options_result.get('options_chain', [])
             
             # Calculate volatility surface
-            from calculate_analysis_tools import calculate_comprehensive_volatility_surface, analyze_volatility_regime
+            from core_tools.calculate_analysis_tools import calculate_comprehensive_volatility_surface, analyze_volatility_regime
             volatility_surface = calculate_comprehensive_volatility_surface(options_chain, spot_price)
             regime_analysis = analyze_volatility_regime(volatility_surface)
             
             # Get VIX analysis
-            from calculate_analysis_tools import analyze_vix_integration_wrapper
+            from core_tools.calculate_analysis_tools import analyze_vix_integration_wrapper
             vix_analysis = analyze_vix_integration_wrapper()
             
             # Compile comprehensive analysis

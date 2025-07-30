@@ -691,14 +691,18 @@ def get_nifty_spot_price_safe():
     """
     try:
         # Try different symbol formats that Kite might expect
-        possible_symbols = ["NIFTY 50"]
+        possible_symbols = ["NSE:NIFTY 50", "NSE:NIFTY", "NIFTY 50", "NIFTY"]
         
         for symbol in possible_symbols:
             try:
+                print(f"[SPOT DEBUG] Trying symbol: {symbol}")
                 result = get_nifty_spot_price()  # Your original function
-                if result and 'error' not in str(result).lower():
+                print(f"[SPOT DEBUG] get_nifty_spot_price() returned: {result}")
+                if result and 'error' not in str(result).lower() and result.get('status') == 'SUCCESS':
+                    print(f"[SPOT DEBUG] Success with symbol: {symbol}")
                     return result
             except Exception as e:
+                print(f"[SPOT DEBUG] Exception with symbol {symbol}: {e}")
                 continue
         
         # If all symbols fail, return structured error
@@ -851,13 +855,13 @@ def get_available_expiry_dates_with_analysis() -> Dict[str, Any]:
                     'category': category,
                     'recommendation': recommendation,
                     'risk_level': risk_level,
-                    'suitable_for': {
-                        'TOO_CLOSE': [],
-                        'SHORT_TERM': ['Day trading', 'Scalping', 'Quick momentum plays'],
-                        'MEDIUM_TERM': ['Swing trading', 'Mean reversion', 'Volatility strategies'],
-                        'LONG_TERM': ['Positional trading', 'Theta decay strategies', 'Directional bets']
-                    }.get(category, [])
                 })
+                # 'suitable_for': {
+                #         'TOO_CLOSE': [],
+                #         'SHORT_TERM': ['Day trading', 'Scalping', 'Quick momentum plays'],
+                #         'MEDIUM_TERM': ['Swing trading', 'Mean reversion', 'Volatility strategies'],
+                #         'LONG_TERM': ['Positional trading', 'Theta decay strategies', 'Directional bets']
+                #     }.get(category, [])
             except:
                 continue
         
@@ -987,7 +991,9 @@ def get_global_market_conditions(current_date: str = None):
         
         # Check if fetch_pre_market_data is available
         try:
-            from pre_market_data import main as fetch_pre_market_data
+            import sys
+            sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+            from data.pre_market_data import fetch_pre_market_data
             data = fetch_pre_market_data()
         except ImportError:
             return {
