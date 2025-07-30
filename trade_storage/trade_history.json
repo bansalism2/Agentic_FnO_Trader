@@ -1742,5 +1742,141 @@
     "exit_time": null,
     "exit_reason": null,
     "exit_price": null
+  },
+  "TRADE_20250730_094616_1": {
+    "strategy_name": "LONG_CALL_SCALP",
+    "legs": [
+      {
+        "symbol": "NIFTY2580724950CE",
+        "action": "BUY",
+        "quantity": 75,
+        "strike": 24950.0,
+        "option_type": "CE",
+        "price": 130.9,
+        "exchange": "NFO"
+      }
+    ],
+    "expiry_date": "2025-08-07",
+    "spot_price": null,
+    "strategy_type": null,
+    "risk_management": {
+      "stop_loss": "6%",
+      "profit_target": "8%",
+      "max_hold_time": "15 minutes",
+      "min_hold_time": "3 minutes"
+    },
+    "analysis_data": {},
+    "execution_details": {
+      "status": "BASKET_SUCCESS",
+      "total_legs": 1,
+      "execution_time": 15.34373688697815,
+      "order_results": [
+        {
+          "leg_number": 1,
+          "order_id": "250730200234879",
+          "symbol": "NIFTY2580724950CE",
+          "action": "BUY",
+          "quantity": 75,
+          "placement_time": 0.20177888870239258,
+          "status": "VERIFIED",
+          "avg_price": 130.35
+        }
+      ],
+      "settlement_details": {
+        "all_successful": true,
+        "settled_orders": [
+          {
+            "leg_number": 1,
+            "order_id": "250730200234879",
+            "symbol": "NIFTY2580724950CE",
+            "action": "BUY",
+            "quantity": 75,
+            "placement_time": 0.20177888870239258,
+            "status": "VERIFIED",
+            "avg_price": 130.35
+          }
+        ],
+        "failed_orders": [],
+        "partial_fills": [],
+        "success_rate": 1.0
+      },
+      "message": "All 1 legs executed successfully"
+    },
+    "trade_id": "TRADE_20250730_094616_1",
+    "status": "CLOSED",
+    "entry_time": "2025-07-30T09:46:16.132907",
+    "last_updated": "2025-07-30T10:04:13.584774",
+    "pnl": -742.4999999999993,
+    "exit_time": "2025-07-30T09:58:45.000000",
+    "exit_reason": "Stop-Loss (6.0%)",
+    "exit_price": 120.45
+  },
+  "TRADE_20250730_100959_1": {
+    "strategy_name": "LONG_CALL_SCALP",
+    "legs": [
+      {
+        "symbol": "NIFTY2580724950CE",
+        "action": "BUY",
+        "quantity": 75,
+        "strike": 24950.0,
+        "option_type": "CE",
+        "price": 117.65,
+        "exchange": "NFO"
+      }
+    ],
+    "expiry_date": "2025-08-07",
+    "spot_price": null,
+    "strategy_type": null,
+    "risk_management": {
+      "stop_loss": "6%",
+      "profit_target": "8%",
+      "max_hold_time": "15 minutes",
+      "min_hold_time": "3 minutes"
+    },
+    "analysis_data": {},
+    "execution_details": {
+      "status": "BASKET_SUCCESS",
+      "total_legs": 1,
+      "execution_time": 15.468276023864746,
+      "order_results": [
+        {
+          "leg_number": 1,
+          "order_id": "250730200339203",
+          "symbol": "NIFTY2580724950CE",
+          "action": "BUY",
+          "quantity": 75,
+          "placement_time": 0.32878994941711426,
+          "status": "VERIFIED",
+          "avg_price": 118.75
+        }
+      ],
+      "settlement_details": {
+        "all_successful": true,
+        "settled_orders": [
+          {
+            "leg_number": 1,
+            "order_id": "250730200339203",
+            "symbol": "NIFTY2580724950CE",
+            "action": "BUY",
+            "quantity": 75,
+            "placement_time": 0.32878994941711426,
+            "status": "VERIFIED",
+            "avg_price": 118.75
+          }
+        ],
+        "failed_orders": [],
+        "partial_fills": [],
+        "success_rate": 1.0
+      },
+      "message": "All 1 legs executed successfully"
+    },
+    "trade_id": "TRADE_20250730_100959_1",
+    "status": "CLOSED",
+    "entry_time": "2025-07-30T10:09:59.117147",
+    "last_updated": "2025-07-30T10:27:29.000000",
+    "pnl": -558.75,
+    "exit_time": "2025-07-30T10:27:29.000000",
+    "exit_reason": "Max Hold Time (15 minutes)",
+    "exit_price": 110.30
   }
 }

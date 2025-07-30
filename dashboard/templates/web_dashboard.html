@@ -86,7 +86,7 @@
 
         .dashboard-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(450px, 1fr));
+            grid-template-columns: 1fr;
             gap: 25px;
             margin-bottom: 30px;
         }
@@ -292,6 +292,27 @@
             word-break: break-word;
         }
 
+        .section-header {
+            margin: 20px 0 10px 0;
+            padding: 10px 0;
+            border-bottom: 2px solid rgba(102, 126, 234, 0.2);
+        }
+        
+        .section-header h3 {
+            margin: 0;
+            color: #2d3748;
+            font-size: 1.1rem;
+            font-weight: 600;
+        }
+        
+        #active-trades-table {
+            margin-bottom: 30px;
+        }
+        
+        #closed-trades-table {
+            margin-top: 20px;
+        }
+        
         .data-table td:hover {
             background: rgba(102, 126, 234, 0.05);
             transform: scale(1.02);
@@ -377,6 +398,12 @@
             color: #666;
         }
 
+        @media (max-width: 1200px) {
+            .dashboard-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+        
         @media (max-width: 768px) {
             .dashboard-grid {
                 grid-template-columns: 1fr;
@@ -416,6 +443,114 @@
         </div>
 
         <div class="dashboard-grid">
+            <!-- Position Manager Card -->
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title">⚡ Position Manager</h2>
+                    <span class="card-icon">⚡</span>
+                </div>
+                <div class="metric-grid">
+                    <div class="metric">
+                        <div class="metric-value" id="active-positions">--</div>
+                        <div class="metric-label">Active Positions</div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-value" id="closed-today">--</div>
+                        <div class="metric-label">Closed Today</div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-value" id="daily-pnl">--</div>
+                        <div class="metric-label">Today's P&L</div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-value" id="win-rate">--</div>
+                        <div class="metric-label">Win Rate</div>
+                    </div>
+                </div>
+                
+                <!-- Current Active Trades Section -->
+                <div class="section-header">
+                    <h3>🟢 Current Active Trades</h3>
+                </div>
+                <div id="active-trades-table">
+                    <table class="data-table position-manager-table">
+                        <thead>
+                            <tr>
+                                <th>Symbol</th>
+                                <th>Quantity</th>
+                                <th>Entry Price</th>
+                                <th>Entry Time</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="active-trades-body">
+                            <tr><td colspan="5" class="loading">Loading...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                
+                <!-- Today's Closed Trades Section -->
+                <div class="section-header">
+                    <h3>📊 Today's Closed Trades</h3>
+                </div>
+                <div id="closed-trades-table">
+                    <table class="data-table position-manager-table">
+                        <thead>
+                            <tr>
+                                <th>Symbol</th>
+                                <th>Strategy</th>
+                                <th>Exit Reason</th>
+                                <th>P&L</th>
+                                <th>Result</th>
+                            </tr>
+                        </thead>
+                        <tbody id="closed-trades-body">
+                            <tr><td colspan="5" class="loading">Loading...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Daily P&L Summary Card -->
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title">💰 Daily P&L Summary</h2>
+                    <span class="card-icon">💰</span>
+                </div>
+                <div class="metric-grid">
+                    <div class="metric">
+                        <div class="metric-value" id="total-closed-trades">--</div>
+                        <div class="metric-label">Closed Trades</div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-value" id="winning-trades">--</div>
+                        <div class="metric-label">Winning</div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-value" id="losing-trades">--</div>
+                        <div class="metric-label">Losing</div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-value" id="breakeven-trades">--</div>
+                        <div class="metric-label">Breakeven</div>
+                    </div>
+                </div>
+                <div id="daily-pnl-table">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Strategy</th>
+                                <th>Trades</th>
+                                <th>P&L</th>
+                            </tr>
+                        </thead>
+                        <tbody id="daily-pnl-body">
+                            <tr><td colspan="3" class="loading">Loading...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
             <!-- Market Conditions Card -->
             <div class="card">
                 <div class="card-header">
@@ -478,50 +613,6 @@
                             <tr><td colspan="3" class="loading">Loading...</td></tr>
                         </tbody>
                     </table>
-                </div>
-            </div>
-
-            <!-- Position Manager Card -->
-            <div class="card">
-                <div class="card-header">
-                    <h2 class="card-title">⚡ Position Manager</h2>
-                    <span class="card-icon">⚡</span>
-                </div>
-                <div class="metric-grid">
-                    <div class="metric">
-                        <div class="metric-value" id="active-positions">--</div>
-                        <div class="metric-label">Active Positions</div>
-                    </div>
-                    <div class="metric">
-                        <div class="metric-value" id="active-trades">--</div>
-                        <div class="metric-label">Active Trades</div>
-                    </div>
-                </div>
-                <div id="positions-table">
-                    <table class="data-table position-manager-table">
-                        <thead>
-                            <tr>
-                                <th>Symbol</th>
-                                <th>Quantity</th>
-                                <th>Avg Price</th>
-                                <th>P&L</th>
-                            </tr>
-                        </thead>
-                        <tbody id="positions-body">
-                            <tr><td colspan="4" class="loading">Loading...</td></tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-
-            <!-- System Status Card -->
-            <div class="card">
-                <div class="card-header">
-                    <h2 class="card-title">🔧 System Status</h2>
-                    <span class="card-icon">🔧</span>
-                </div>
-                <div id="system-status">
-                    <div class="loading">Loading system status...</div>
                 </div>
             </div>
         </div>
@@ -670,9 +761,28 @@
 
             // Update position manager
             document.getElementById('active-positions').textContent = data.position_manager.active_positions_count;
-            document.getElementById('active-trades').textContent = data.position_manager.active_trades_count;
+            document.getElementById('closed-today').textContent = data.daily_pnl ? data.daily_pnl.total_closed_trades : 0;
             
-            updatePositionsTable(data.position_manager.positions);
+            // Update P&L
+            const totalPnl = data.position_manager.total_pnl || 0;
+            document.getElementById('daily-pnl').textContent = `₹${totalPnl.toFixed(2)}`;
+            
+            // Update active trades table
+            updateActiveTradesTable(data.position_manager.active_trades);
+            
+            // Update closed trades table
+            updateClosedTradesTable(data.daily_pnl ? data.daily_pnl.closed_trades : {});
+
+            // Update daily P&L summary
+            if (data.daily_pnl) {
+                document.getElementById('win-rate').textContent = `${data.daily_pnl.win_rate.toFixed(1)}%`;
+                document.getElementById('total-closed-trades').textContent = data.daily_pnl.total_closed_trades;
+                document.getElementById('winning-trades').textContent = data.daily_pnl.winning_trades;
+                document.getElementById('losing-trades').textContent = data.daily_pnl.losing_trades;
+                document.getElementById('breakeven-trades').textContent = data.daily_pnl.breakeven_trades;
+                
+                updateDailyPnlTable(data.daily_pnl.strategy_breakdown);
+            }
 
             // Update system status
             updateSystemStatus(data.system_status);
@@ -843,22 +953,97 @@
             }).join('');
         }
 
-        function updatePositionsTable(positions) {
-            const tbody = document.getElementById('positions-body');
+        function updateActiveTradesTable(activeTrades) {
+            const tbody = document.getElementById('active-trades-body');
             
-            if (!positions || positions.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="4">No active positions</td></tr>';
+            if (!activeTrades || Object.keys(activeTrades).length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5">No active trades</td></tr>';
                 return;
             }
 
-            tbody.innerHTML = positions.map(position => {
-                const pnl = position.pnl || 0;
+            tbody.innerHTML = Object.values(activeTrades).map(trade => {
+                // Get symbol and quantity from the first leg
+                let symbol = 'N/A';
+                let quantity = 0;
+                let entryPrice = 0;
+                
+                if (trade.legs && trade.legs.length > 0) {
+                    const leg = trade.legs[0];
+                    symbol = leg.symbol || 'N/A';
+                    quantity = leg.quantity || 0;
+                    entryPrice = leg.price || 0;
+                }
+                
+                // Calculate time since entry
+                const entryTime = new Date(trade.entry_time);
+                const now = new Date();
+                const timeDiff = Math.floor((now - entryTime) / (1000 * 60)); // minutes
+                const status = timeDiff < 15 ? '🟢 Active' : '🟡 Extended';
+                
+                // Show entry time instead of P&L for active trades
+                const entryTimeStr = entryTime.toLocaleTimeString();
+                
+                return `
+                    <tr>
+                        <td><strong>${symbol}</strong></td>
+                        <td>${quantity}</td>
+                        <td>₹${entryPrice.toFixed(2)}</td>
+                        <td><span class="badge badge-info">Entry: ${entryTimeStr}</span></td>
+                        <td>${status}</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+        
+        function updateClosedTradesTable(closedTrades) {
+            const tbody = document.getElementById('closed-trades-body');
+            
+            if (!closedTrades || Object.keys(closedTrades).length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5">No closed trades today</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = Object.values(closedTrades).map(trade => {
+                const pnl = trade.pnl || 0;
+                const pnlClass = pnl >= 0 ? 'badge-success' : 'badge-danger';
+                const resultIcon = pnl >= 0 ? '✅' : '❌';
+                
+                // Get symbol from the first leg
+                let symbol = 'N/A';
+                if (trade.legs && trade.legs.length > 0) {
+                    symbol = trade.legs[0].symbol || 'N/A';
+                }
+                
+                // Format exit time
+                const exitTime = trade.exit_time ? new Date(trade.exit_time).toLocaleTimeString() : 'N/A';
+                
+                return `
+                    <tr>
+                        <td><strong>${symbol}</strong></td>
+                        <td>${trade.strategy_name || 'N/A'}</td>
+                        <td>${trade.exit_reason || 'N/A'}</td>
+                        <td><span class="badge ${pnlClass}">₹${pnl.toFixed(2)}</span></td>
+                        <td>${resultIcon} ${pnl >= 0 ? 'WIN' : 'LOSS'}</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function updateDailyPnlTable(strategyBreakdown) {
+            const tbody = document.getElementById('daily-pnl-body');
+            
+            if (!strategyBreakdown || Object.keys(strategyBreakdown).length === 0) {
+                tbody.innerHTML = '<tr><td colspan="3">No closed trades today</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = Object.entries(strategyBreakdown).map(([strategy, data]) => {
+                const pnl = data.pnl || 0;
                 const pnlClass = pnl >= 0 ? 'badge-success' : 'badge-danger';
                 return `
                     <tr>
-                        <td>${position.symbol}</td>
-                        <td>${position.quantity}</td>
-                        <td>₹${(position.average_price || 0).toFixed(2)}</td>
+                        <td>${strategy}</td>
+                        <td>${data.count}</td>
                         <td><span class="badge ${pnlClass}">₹${pnl.toFixed(2)}</span></td>
                     </tr>
                 `;

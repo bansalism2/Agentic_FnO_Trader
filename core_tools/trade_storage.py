@@ -156,7 +156,7 @@ def update_trade_status(trade_id: str, status: str, pnl: float = None,
             # Update in active trades
             active_trades[trade_id] = trade
         
-        # Write back to file
+        # Write back to file (always write, regardless of status)
         with open(TRADES_FILE, 'w') as f:
             json.dump(active_trades, f, indent=2)
         
@@ -279,6 +279,59 @@ def get_trade_summary() -> Dict[str, Any]:
         return {
             'status': 'ERROR',
             'message': f'Failed to get trade summary: {str(e)}'
+        }
+
+def get_daily_pnl_summary() -> Dict[str, Any]:
+    """
+    Get today's P&L summary from closed positions.
+    
+    Returns:
+        Dict with today's P&L statistics
+    """
+    try:
+        today = datetime.datetime.now().date()
+        trade_history = get_trade_history(days=1)  # Get today's closed trades
+        
+        # Filter for trades closed today
+        today_closed_trades = {}
+        for trade_id, trade in trade_history.items():
+            if trade.get('exit_time'):
+                exit_date = datetime.datetime.fromisoformat(trade['exit_time']).date()
+                if exit_date == today:
+                    today_closed_trades[trade_id] = trade
+        
+        # Calculate today's P&L
+        total_today_pnl = sum(trade.get('pnl', 0) for trade in today_closed_trades.values())
+        winning_trades = sum(1 for trade in today_closed_trades.values() if trade.get('pnl', 0) > 0)
+        losing_trades = sum(1 for trade in today_closed_trades.values() if trade.get('pnl', 0) < 0)
+        breakeven_trades = sum(1 for trade in today_closed_trades.values() if trade.get('pnl', 0) == 0)
+        
+        # Strategy breakdown for today
+        today_strategies = {}
+        for trade in today_closed_trades.values():
+            strategy = trade.get('strategy_name', 'Unknown')
+            if strategy not in today_strategies:
+                today_strategies[strategy] = {'count': 0, 'pnl': 0}
+            today_strategies[strategy]['count'] += 1
+            today_strategies[strategy]['pnl'] += trade.get('pnl', 0)
+        
+        return {
+            'date': today.isoformat(),
+            'total_closed_trades': len(today_closed_trades),
+            'total_pnl': total_today_pnl,
+            'winning_trades': winning_trades,
+            'losing_trades': losing_trades,
+            'breakeven_trades': breakeven_trades,
+            'win_rate': (winning_trades / len(today_closed_trades) * 100) if today_closed_trades else 0,
+            'strategy_breakdown': today_strategies,
+            'closed_trades': today_closed_trades,
+            'last_updated': datetime.datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        return {
+            'status': 'ERROR',
+            'message': f'Failed to get daily P&L summary: {str(e)}'
         }
 
 def clear_active_trades() -> Dict[str, Any]:

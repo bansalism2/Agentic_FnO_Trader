@@ -26,7 +26,7 @@ import time
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from core_tools.execution_portfolio_tools import get_portfolio_positions
-from core_tools.trade_storage import get_active_trades, get_trade_history
+from core_tools.trade_storage import get_active_trades, get_trade_history, get_daily_pnl_summary
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -139,6 +139,30 @@ class WebDashboard:
             logger.error(f"Error getting active trades: {e}")
             return {}
     
+    def get_daily_pnl_data(self) -> Dict:
+        """
+        Get today's P&L summary from closed positions
+        """
+        try:
+            daily_pnl = get_daily_pnl_summary()
+            return daily_pnl
+        except Exception as e:
+            logger.error(f"Error getting daily P&L: {e}")
+            return {
+                'date': datetime.now(self.ist_timezone).date().isoformat(),
+                'total_closed_trades': 0,
+                'total_pnl': 0,
+                'winning_trades': 0,
+                'losing_trades': 0,
+                'breakeven_trades': 0,
+                'win_rate': 0,
+                'strategy_breakdown': {},
+                'closed_trades': {},
+                'last_updated': datetime.now(self.ist_timezone).isoformat()
+            }
+    
+
+    
     def update_dashboard(self):
         """
         Update all dashboard data
@@ -163,7 +187,17 @@ class WebDashboard:
                 }
             
             # Load intended trades
-            intended_trades = self.load_intended_trades(60)
+            intended_trades = self.load_intended_trades(60)  # 1 hour lookback
+            if intended_trades:
+                latest_intended = intended_trades[-1]
+                self.dashboard_data['opportunity_hunter'] = {
+                    'latest_intended_symbol': latest_intended.get('symbol', 'N/A'),
+                    'latest_intended_action': latest_intended.get('action', 'N/A'),
+                    'latest_intended_reason': latest_intended.get('reason', 'N/A'),
+                    'recent_intended_count': len(intended_trades),
+                    'recent_intended_trades': intended_trades[-10:],  # Last 10
+                    'chart_data': self._prepare_intended_trades_chart(intended_trades)
+                }
             if intended_trades:
                 latest_intended = intended_trades[-1]
                 self.dashboard_data['opportunity_hunter'] = {
@@ -175,20 +209,24 @@ class WebDashboard:
                     'chart_data': self._prepare_intended_trades_chart(intended_trades)
                 }
             
-            # Get current positions
-            positions = self.get_current_positions()
-            nifty_positions = [p for p in positions if 'NIFTY' in p.get('symbol', '')]
-            self.dashboard_data['active_positions'] = nifty_positions
-            
-            # Get active trades
+            # Get active trades from local storage only (no broker API)
             active_trades = self.get_active_trades_data()
+            
+            # Get daily P&L summary
+            daily_pnl = self.get_daily_pnl_data()
+            
             self.dashboard_data['position_manager'] = {
-                'active_positions_count': len(nifty_positions),
+                'active_positions_count': len(active_trades),
                 'active_trades_count': len(active_trades),
-                'positions': nifty_positions,
+                'positions': active_trades,  # Use local active trades as positions
                 'active_trades': active_trades,
-                'chart_data': self._prepare_positions_chart(nifty_positions)
+                'total_pnl': daily_pnl.get('total_pnl', 0),  # Use local P&L (now accurate)
+                'chart_data': self._prepare_positions_chart(active_trades)
             }
+            
+            # Get daily P&L summary (combine broker data with local history)
+            daily_pnl = self.get_daily_pnl_data()
+            self.dashboard_data['daily_pnl'] = daily_pnl
             
             # System status
             self.dashboard_data['system_status'] = {
@@ -277,21 +315,24 @@ class WebDashboard:
             'symbols': symbols
         }
     
-    def _prepare_positions_chart(self, positions: List[Dict]) -> Dict:
+    def _prepare_positions_chart(self, active_trades: Dict) -> Dict:
         """
-        Prepare chart data for positions
+        Prepare chart data for active trades
         """
-        if not positions:
+        if not active_trades:
             return {}
         
         symbols = []
         quantities = []
         pnl_values = []
         
-        for position in positions:
-            symbols.append(position.get('symbol', 'UNKNOWN'))
-            quantities.append(abs(position.get('quantity', 0)))
-            pnl_values.append(position.get('pnl', 0))
+        for trade_id, trade in active_trades.items():
+            if trade.get('legs'):
+                # Get the first leg (assuming single leg trades for now)
+                leg = trade['legs'][0]
+                symbols.append(leg.get('symbol', 'UNKNOWN'))
+                quantities.append(abs(leg.get('quantity', 0)))
+                pnl_values.append(trade.get('pnl', 0))
         
         return {
             'symbols': symbols,
@@ -357,15 +398,24 @@ def get_intended_trades():
 @app.route('/api/positions')
 def get_positions():
     """
-    API endpoint to get positions data
+    API endpoint to get positions data (from local storage)
     """
-    positions = dashboard.get_current_positions()
-    nifty_positions = [p for p in positions if 'NIFTY' in p.get('symbol', '')]
-    chart_data = dashboard._prepare_positions_chart(nifty_positions)
+    active_trades = dashboard.get_active_trades_data()
+    chart_data = dashboard._prepare_positions_chart(active_trades)
     return jsonify({
-        'positions': nifty_positions,
+        'positions': active_trades,
         'chart_data': chart_data
     })
+
+@app.route('/api/daily-pnl')
+def get_daily_pnl():
+    """
+    API endpoint to get today's P&L summary
+    """
+    daily_pnl = dashboard.get_daily_pnl_data()
+    return jsonify(daily_pnl)
+
+
 
 def start_auto_refresh():
     """

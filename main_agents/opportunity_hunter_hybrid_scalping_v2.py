@@ -84,11 +84,15 @@ class HybridTradingMode:
         iv_percentile = market_conditions.get('iv_percentile', 0)
         macd_signal = market_conditions.get('macd_signal', 'NEUTRAL')
         
-        # Calculate momentum score (0-3 scale) - More realistic approach
-        momentum_score = (
-            (abs(rsi - 50) / 50) +                    # 0-1: RSI deviation
-            (1 if macd_signal in ['BUY', 'SELL'] else 0)  # 0-1: MACD signal
-        )
+        # Calculate momentum score (0-2 scale) - Fixed approach
+        # RSI deviation: clamp to 0-1 range, differentiate bullish/bearish
+        rsi_deviation = min(abs(rsi - 50) / 50, 1.0)  # Clamp to 0-1
+        rsi_direction = 1 if rsi > 50 else -1  # Bullish vs bearish
+        
+        # MACD signal strength: differentiate BUY/SELL vs NEUTRAL
+        macd_strength = 1 if macd_signal in ['BUY', 'SELL'] else 0
+        
+        momentum_score = rsi_deviation + macd_strength  # 0-2 scale
         
         # SCALPING MODE: Moderate to strong momentum + ADX confirmation
         adx = market_conditions.get('adx', 0)
@@ -250,24 +254,36 @@ class ScalpingEngine:
         try:
             margins = self.get_margins()
             if margins.get('status') != 'SUCCESS':
-                return {'action': 'WAIT', 'reason': 'Cannot verify account margins'}
+                return {'status': 'ERROR', 'reason': 'Cannot verify account margins'}
             available_capital = margins['equity'].get('live_balance', 0)
             if available_capital < 50000:
-                return {'action': 'WAIT', 'reason': f'Insufficient capital: ₹{available_capital}'}
+                return {'status': 'ERROR', 'reason': f'Insufficient capital: ₹{available_capital}'}
         except Exception as e:
-            return {'action': 'WAIT', 'reason': f'Margin check failed: {str(e)}'}
+            return {'status': 'ERROR', 'reason': f'Margin check failed: {str(e)}'}
         # Get optimal expiry
         expiry_date = self._get_optimal_expiry_for_mode('SCALPING')
         if not expiry_date:
-            return {'action': 'WAIT', 'reason': 'No suitable expiry available'}
+            return {'status': 'ERROR', 'reason': 'No suitable expiry available'}
         # --- Risk-aware scalping logic ---
-        # 1. Momentum override: always allow, bypass MACD/ADX, reduced size/tight stop
-        if (adx < 25 and (rsi < 25 or rsi > 75)) or (adx >= 25 and (rsi < 20 or rsi > 80)):
-            print(f"[Momentum Override] Bypassing MACD/ADX due to extreme RSI (RSI={rsi:.2f}, ADX={adx:.1f}). Using reduced size and tight stop.")
-            option_price = self.fetch_atm_option_price('CE' if rsi < 25 or rsi < 20 else 'PE', expiry_date)
+        # LOGIC FLOW: Priority-based execution (each section returns if trade is executed)
+        
+        # 1. PRIORITY 1: Extreme RSI Override (highest priority)
+        # When RSI is extreme, trade regardless of ADX with reduced size for momentum reversal
+        if rsi < 25 or rsi > 75:
+            print(f"[PRIORITY 1 - Extreme RSI Override] RSI={rsi:.1f} is extreme. Using momentum reversal strategy with reduced size.")
+            
+            # Determine option type based on RSI extremes
+            if rsi < 25:  # Oversold - expect bounce
+                option_type = 'CE'  # Buy CALL for upside
+                trade_direction = 'LONG_CALL'
+            else:  # Overbought (rsi > 75) - expect reversal  
+                option_type = 'PE'  # Buy PUT for downside
+                trade_direction = 'LONG_PUT'
+            
+            option_price = self.fetch_atm_option_price(option_type, expiry_date)
             if not option_price or option_price <= 0:
                 print(f"[ERROR] Could not fetch real ATM option price. Skipping trade.")
-                return {'action': 'WAIT', 'reason': 'Failed to fetch ATM option price'}
+                return {'status': 'ERROR', 'reason': 'Failed to fetch ATM option price'}
             stop_loss_percent = 6  # Increased from 2% to 6% for options volatility
             # Calculate normal quantity, then halve it (minimum 75)
             normal_qty = self.calculate_dynamic_position_size(available_capital, option_price, stop_loss_percent)
@@ -276,17 +292,43 @@ class ScalpingEngine:
             override_conditions = dict(conditions)
             override_conditions['stop_loss_percent'] = stop_loss_percent
             override_conditions['quantity'] = quantity
-            if rsi < 25 or rsi < 20:
-                print(f"[Momentum Override] Executing LONG scalp (reduced size: {quantity}, tight stop: {stop_loss_percent}%)")
+            
+            if trade_direction == 'LONG_CALL':
+                print(f"[PRIORITY 1] Executing LONG CALL scalp (reduced size: {quantity}, tight stop: {stop_loss_percent}%)")
                 return self._execute_long_call_scalp(expiry_date, available_capital, override_conditions)
             else:
-                print(f"[Momentum Override] Executing SHORT scalp (reduced size: {quantity}, tight stop: {stop_loss_percent}%)")
+                print(f"[PRIORITY 1] Executing LONG PUT scalp (reduced size: {quantity}, tight stop: {stop_loss_percent}%)")
                 return self._execute_long_put_scalp(expiry_date, available_capital, override_conditions)
-        # 2. Normal logic: all filters must align
-        if adx < 25:
+        
+        # 2. PRIORITY 2: Reverse ADX Logic (only if RSI is NOT extreme)
+        # NOTE: This section is intentionally unreachable when RSI < 25 or RSI > 75
+        # because Priority 1 (Extreme RSI Override) returns before reaching here.
+        # ADX < 20 (very weak trend) = Use momentum strategies (RSI + MACD)
+        # ADX >= 30 (strong trend) = Use trend following (MACD only, ignore RSI extremes)
+        # ADX 20-30 = Mixed conditions, use both approaches
+        if adx < 20:
+            # Very weak trend: Use momentum strategies (RSI + MACD alignment)
             if rsi > 55 and macd_signal == 'BUY':
+                print(f"[PRIORITY 2 - Weak Trend] ADX={adx:.1f} < 20, RSI={rsi:.1f} > 55, MACD=BUY: Executing LONG CALL")
                 return self._execute_long_call_scalp(expiry_date, available_capital, conditions)
             elif rsi < 45 and macd_signal == 'SELL':
+                print(f"[PRIORITY 2 - Weak Trend] ADX={adx:.1f} < 20, RSI={rsi:.1f} < 45, MACD=SELL: Executing LONG PUT")
+                return self._execute_long_put_scalp(expiry_date, available_capital, conditions)
+        elif adx >= 30:
+            # Strong trend: Use trend following (MACD only, ignore RSI extremes)
+            if macd_signal == 'BUY':
+                print(f"[PRIORITY 2 - Strong Trend] ADX={adx:.1f} >= 30, MACD=BUY: Executing LONG CALL (trend following)")
+                return self._execute_long_call_scalp(expiry_date, available_capital, conditions)
+            elif macd_signal == 'SELL':
+                print(f"[PRIORITY 2 - Strong Trend] ADX={adx:.1f} >= 30, MACD=SELL: Executing LONG PUT (trend following)")
+                return self._execute_long_put_scalp(expiry_date, available_capital, conditions)
+        else:
+            # Moderate trend (ADX 20-30): Use balanced approach (RSI + MACD, but less strict)
+            if rsi > 50 and macd_signal == 'BUY':
+                print(f"[PRIORITY 2 - Moderate Trend] ADX={adx:.1f} 20-30, RSI={rsi:.1f} > 50, MACD=BUY: Executing LONG CALL")
+                return self._execute_long_call_scalp(expiry_date, available_capital, conditions)
+            elif rsi < 50 and macd_signal == 'SELL':
+                print(f"[PRIORITY 2 - Moderate Trend] ADX={adx:.1f} 20-30, RSI={rsi:.1f} < 50, MACD=SELL: Executing LONG PUT")
                 return self._execute_long_put_scalp(expiry_date, available_capital, conditions)
         # 3. Regime not ideal: reduce size/tighten stop for normal trades
         if regime_not_ideal:
@@ -294,7 +336,7 @@ class ScalpingEngine:
             option_price = self.fetch_atm_option_price('CE' if rsi > 50 else 'PE', expiry_date)
             if not option_price or option_price <= 0:
                 print(f"[ERROR] Could not fetch real ATM option price. Skipping trade.")
-                return {'action': 'WAIT', 'reason': 'Failed to fetch ATM option price'}
+                return {'status': 'ERROR', 'reason': 'Failed to fetch ATM option price'}
             stop_loss_percent = 6 # Increased from 2% to 6% for options volatility
             normal_qty = self.calculate_dynamic_position_size(available_capital, option_price, stop_loss_percent)
             LOT_SIZE = 75
@@ -310,7 +352,7 @@ class ScalpingEngine:
                 return self._execute_long_put_scalp(expiry_date, available_capital, override_conditions)
         # 4. Otherwise, no trade
         return {
-            'action': 'WAIT',
+            'status': 'ERROR',
             'reason': f'No clear scalping setup - RSI: {rsi:.1f}, MACD: {macd_signal}, ADX: {adx:.1f}'
         }
     
@@ -322,7 +364,7 @@ class ScalpingEngine:
             option_price = self.fetch_atm_option_price('CE', expiry_date)
             if not option_price or option_price <= 0:
                 print(f"[ERROR] Could not fetch real ATM call option price. Skipping trade.")
-                return {'action': 'WAIT', 'reason': 'Failed to fetch ATM call option price'}
+                return {'status': 'ERROR', 'reason': 'Failed to fetch ATM call option price'}
             stop_loss_percent = conditions.get('stop_loss_percent', 6)  # Increased from 3% to 6% for options volatility
             quantity = conditions.get('quantity', None)
             if quantity is None:
@@ -336,7 +378,7 @@ class ScalpingEngine:
                 quantity=quantity
             )
             if strategy_result.get('status') != 'SUCCESS':
-                return {'action': 'WAIT', 'reason': f'Strategy creation failed: {strategy_result.get("message")}' }
+                return {'status': 'ERROR', 'reason': f'Strategy creation failed: {strategy_result.get("message")}' }
             # 2. Execute strategy
             execution_result = self.execute_strategy(
                 strategy_legs=strategy_result.get('legs', []),
@@ -355,7 +397,7 @@ class ScalpingEngine:
             )
             return execution_result
         except Exception as e:
-            return {'action': 'WAIT', 'reason': f'Execution failed: {str(e)}'}
+            return {'status': 'ERROR', 'reason': f'Execution failed: {str(e)}'}
 
     def _execute_long_put_scalp(self, expiry_date: str, capital: float, conditions: Dict[str, Any]) -> Dict[str, Any]:
         """Execute long put scalping trade"""
@@ -365,7 +407,7 @@ class ScalpingEngine:
             option_price = self.fetch_atm_option_price('PE', expiry_date)
             if not option_price or option_price <= 0:
                 print(f"[ERROR] Could not fetch real ATM put option price. Skipping trade.")
-                return {'action': 'WAIT', 'reason': 'Failed to fetch ATM put option price'}
+                return {'status': 'ERROR', 'reason': 'Failed to fetch ATM put option price'}
             stop_loss_percent = conditions.get('stop_loss_percent', 6)  # Increased from 3% to 6% for options volatility
             quantity = conditions.get('quantity', None)
             if quantity is None:
@@ -379,7 +421,7 @@ class ScalpingEngine:
                 quantity=quantity
             )
             if strategy_result.get('status') != 'SUCCESS':
-                return {'action': 'WAIT', 'reason': f'Strategy creation failed: {strategy_result.get("message")}' }
+                return {'status': 'ERROR', 'reason': f'Strategy creation failed: {strategy_result.get("message")}' }
             # 2. Execute strategy
             execution_result = self.execute_strategy(
                 strategy_legs=strategy_result.get('legs', []),
@@ -398,7 +440,7 @@ class ScalpingEngine:
             )
             return execution_result
         except Exception as e:
-            return {'action': 'WAIT', 'reason': f'Execution failed: {str(e)}'}
+            return {'status': 'ERROR', 'reason': f'Execution failed: {str(e)}'}
 
 class PremiumSellingEngine:
     """Pure premium selling execution - multi-leg, time-based with ACTUAL strategy execution"""
@@ -463,18 +505,18 @@ class PremiumSellingEngine:
         try:
             margins = self.get_margins()
             if margins.get('status') != 'SUCCESS':
-                return {'action': 'WAIT', 'reason': 'Cannot verify account margins'}
+                return {'status': 'ERROR', 'reason': 'Cannot verify account margins'}
             
             available_capital = margins['equity'].get('live_balance', 0)
             if available_capital < 100000:  # Higher capital requirement for premium selling
-                return {'action': 'WAIT', 'reason': f'Insufficient capital for premium selling: ₹{available_capital}'}
+                return {'status': 'ERROR', 'reason': f'Insufficient capital for premium selling: ₹{available_capital}'}
         except Exception as e:
-            return {'action': 'WAIT', 'reason': f'Margin check failed: {str(e)}'}
+            return {'status': 'ERROR', 'reason': f'Margin check failed: {str(e)}'}
         
         # Get optimal expiry
         expiry_date = self._get_optimal_expiry_for_mode('PREMIUM_SELLING')
         if not expiry_date:
-            return {'action': 'WAIT', 'reason': 'No suitable expiry available'}
+            return {'status': 'ERROR', 'reason': 'No suitable expiry available'}
         
         # Strategy selection and execution
         if iv_percentile > 75 and abs(rsi - 50) < 15:
@@ -483,7 +525,7 @@ class PremiumSellingEngine:
             return self._execute_iron_condor(expiry_date, available_capital, conditions)
         else:
             return {
-                'action': 'WAIT',
+                'status': 'ERROR',
                 'reason': f'No clear premium selling setup - IV: {iv_percentile:.1f}%, RSI: {rsi:.1f}, Regime: {market_regime}'
             }
     
@@ -497,7 +539,7 @@ class PremiumSellingEngine:
             )
             
             if strategy_result.get('status') != 'SUCCESS':
-                return {'action': 'WAIT', 'reason': f'Strategy creation failed: {strategy_result.get("message")}'}
+                return {'status': 'ERROR', 'reason': f'Strategy creation failed: {strategy_result.get("message")}'}
             
             # 2. Execute strategy
             execution_result = self.execute_strategy(
@@ -518,7 +560,7 @@ class PremiumSellingEngine:
             return execution_result
             
         except Exception as e:
-            return {'action': 'WAIT', 'reason': f'Execution failed: {str(e)}'}
+            return {'status': 'ERROR', 'reason': f'Execution failed: {str(e)}'}
     
     def _execute_iron_condor(self, expiry_date: str, capital: float, conditions: Dict[str, Any]) -> Dict[str, Any]:
         """Execute iron condor premium selling trade"""
@@ -530,7 +572,7 @@ class PremiumSellingEngine:
             )
             
             if strategy_result.get('status') != 'SUCCESS':
-                return {'action': 'WAIT', 'reason': f'Strategy creation failed: {strategy_result.get("message")}'}
+                return {'status': 'ERROR', 'reason': f'Strategy creation failed: {strategy_result.get("message")}'}
             
             # 2. Execute strategy
             execution_result = self.execute_strategy(
@@ -551,7 +593,7 @@ class PremiumSellingEngine:
             return execution_result
             
         except Exception as e:
-            return {'action': 'WAIT', 'reason': f'Execution failed: {str(e)}'}
+            return {'status': 'ERROR', 'reason': f'Execution failed: {str(e)}'}
 
 class HybridTradingSystem:
     """Main hybrid trading system with clear mode separation"""
@@ -573,11 +615,11 @@ class HybridTradingSystem:
         
         # Apply time restrictions
         if mode['mode'] == 'SCALPING' and time_mode == 'PREMIUM_SELLING_ONLY':
-            return {'action': 'WAIT', 'reason': 'Scalping not allowed during mid-day calm period'}
+            return {'status': 'ERROR', 'reason': 'Scalping not allowed during mid-day calm period'}
         elif mode['mode'] == 'PREMIUM_SELLING' and time_mode == 'SCALPING_ONLY':
-            return {'action': 'WAIT', 'reason': 'Premium selling not allowed during closing volatility'}
+            return {'status': 'ERROR', 'reason': 'Premium selling not allowed during closing volatility'}
         elif time_mode == 'NONE':
-            return {'action': 'WAIT', 'reason': 'Outside trading hours'}
+            return {'status': 'ERROR', 'reason': 'Outside trading hours'}
         
         # Execute based on mode
         if mode['mode'] == 'SCALPING':
@@ -589,7 +631,7 @@ class HybridTradingSystem:
             result['mode'] = 'PREMIUM_SELLING'
             return result
         else:
-            return {'action': 'WAIT', 'reason': mode['reason'], 'mode': 'WAIT'}
+            return {'status': 'ERROR', 'reason': mode['reason'], 'mode': 'WAIT'}
 
 def _calculate_market_conditions() -> Dict[str, Any]:
     """
@@ -685,15 +727,15 @@ def trend_following_signal(history, lookback=4):
     current_regime = history[-1].get('market_regime', 'UNKNOWN')
     print(f"[DEBUG] Current market regime: {current_regime}")
     
-    # Momentum override (extreme conditions)
+    # Momentum override (extreme conditions) - PRIORITY 1
     if rsi_vals[-1] < 25:
-        print(f"[Momentum Override] RSI={rsi_vals[-1]:.2f} < 25: Triggering LONG signal.")
+        print(f"[Momentum Override] RSI={rsi_vals[-1]:.2f} < 25: Triggering LONG signal (oversold reversal).")
         return "LONG"
     if rsi_vals[-1] > 75:
-        print(f"[Momentum Override] RSI={rsi_vals[-1]:.2f} > 75: Triggering SHORT signal.")
+        print(f"[Momentum Override] RSI={rsi_vals[-1]:.2f} > 75: Triggering SHORT signal (overbought reversal).")
         return "SHORT"
     
-    # Regime-based execution (NEW - captures obvious opportunities)
+    # Regime-based execution (PRIORITY 2) - captures obvious opportunities
     if current_regime == "TRENDING_BULL" and adx_vals[-1] > 35:
         if 40 <= rsi_vals[-1] <= 60:  # Neutral but favorable zone
             print(f"[Regime-Based] TRENDING_BULL regime + ADX={adx_vals[-1]:.2f} + RSI={rsi_vals[-1]:.2f}: Triggering LONG signal.")
@@ -705,14 +747,24 @@ def trend_following_signal(history, lookback=4):
     def count_falling_or_flat(vals):
         return sum(vals[i] <= vals[i-1] for i in range(1, lookback))
     
+    # Trend continuation signals (PRIORITY 3) - ONLY if NO extreme RSI in current bar
+    # This prevents conflict between momentum reversal and trend continuation
+    current_rsi = rsi_vals[-1]
+    
     # LONG: RSI > 60 for all bars, at least 2/3 rising/flat; ADX > 20 for all, at least 2/3 rising/flat
-    if all(r > 60 for r in rsi_vals) and all(a > 20 for a in adx_vals):
+    # BUT only if current RSI is NOT extreme (not < 25 or > 75)
+    if (all(r > 60 for r in rsi_vals) and all(a > 20 for a in adx_vals) and 
+        25 <= current_rsi <= 75):  # Current RSI must be in normal range
         if count_rising_or_flat(rsi_vals) >= 2 and count_rising_or_flat(adx_vals) >= 2:
+            print(f"[Trend Continuation] RSI > 60 trend + ADX > 20 + Normal RSI ({current_rsi:.1f}): Triggering LONG signal.")
             return "LONG"
     
     # SHORT: RSI < 40 for all bars, at least 2/3 falling/flat; ADX > 20 for all, at least 2/3 rising/flat
-    if all(r < 40 for r in rsi_vals) and all(a > 20 for a in adx_vals):
+    # BUT only if current RSI is NOT extreme (not < 25 or > 75)
+    if (all(r < 40 for r in rsi_vals) and all(a > 20 for a in adx_vals) and 
+        25 <= current_rsi <= 75):  # Current RSI must be in normal range
         if count_falling_or_flat(rsi_vals) >= 2 and count_rising_or_flat(adx_vals) >= 2:
+            print(f"[Trend Continuation] RSI < 40 trend + ADX > 20 + Normal RSI ({current_rsi:.1f}): Triggering SHORT signal.")
             return "SHORT"
     
     return "WAIT"
@@ -853,6 +905,15 @@ def run_hybrid_scalping_opportunity_hunter() -> Dict[str, Any]:
             # Check if execution was successful
             if result.get('status') == 'SUCCESS':
                 result['mode'] = 'PREMIUM_SELLING'
+                
+                # Add analysis summary for successful premium selling
+                result['analysis_summary'] = {
+                    "mode_detection": "Detected PREMIUM_SELLING mode",
+                    "strategy_selection": result.get('strategy', 'NONE'),
+                    "risk_validation": "Appropriate for high IV regime",
+                    "execution_plan": "Premium selling strategy executed"
+                }
+                
                 return result
             else:
                 # Execution failed, return the error
@@ -861,7 +922,13 @@ def run_hybrid_scalping_opportunity_hunter() -> Dict[str, Any]:
                     'execution_result': result,
                     'storage_result': result.get('storage_result'),
                     'message': result.get('message', 'Strategy execution failed'),
-                    'mode': 'PREMIUM_SELLING'
+                    'mode': 'PREMIUM_SELLING',
+                    'analysis_summary': {
+                        "mode_detection": "Detected PREMIUM_SELLING mode",
+                        "strategy_selection": "NONE",
+                        "risk_validation": "Execution failed",
+                        "execution_plan": "Strategy execution failed"
+                    }
                 }
         
         # --- Scalping: Regime is advisory, trend is main gate ---
@@ -895,6 +962,15 @@ def run_hybrid_scalping_opportunity_hunter() -> Dict[str, Any]:
                 if result.get('status') == 'SUCCESS':
                     result['mode'] = 'SCALPING'
                     result['direction'] = 'LONG'
+                    
+                    # Add analysis summary for successful scalping
+                    result['analysis_summary'] = {
+                        "mode_detection": "Detected SCALPING mode",
+                        "strategy_selection": result.get('strategy', 'NONE'),
+                        "risk_validation": "Appropriate for trend+regime aligned",
+                        "execution_plan": "Scalping strategy executed (normal size)"
+                    }
+                    
                     return result
                 else:
                     # Execution failed, return the error
@@ -904,7 +980,13 @@ def run_hybrid_scalping_opportunity_hunter() -> Dict[str, Any]:
                         'storage_result': result.get('storage_result'),
                         'message': result.get('message', 'Strategy execution failed'),
                         'mode': 'SCALPING',
-                        'direction': 'LONG'
+                        'direction': 'LONG',
+                        'analysis_summary': {
+                            "mode_detection": "Detected SCALPING mode",
+                            "strategy_selection": "NONE",
+                            "risk_validation": "Execution failed",
+                            "execution_plan": "Strategy execution failed"
+                        }
                     }
             else:
                 print("[Decision] Executing scalping LONG (trend only, regime not ideal: reduced size/tighter stop)")
@@ -1038,40 +1120,31 @@ def run_hybrid_scalping_opportunity_hunter() -> Dict[str, Any]:
                     }
         else:
             print("[Decision] No trend-following signal for scalping. Skipping trade.")
+            
+            # Create analysis summary for WAIT case
+            analysis_summary = {
+                "mode_detection": "No mode detected (WAIT)",
+                "strategy_selection": "NONE",
+                "risk_validation": "No risk (no trade)",
+                "execution_plan": "No execution needed"
+            }
+            
             return {
                 'status': 'SUCCESS',
                 'decision': 'WAIT',
                 'reason': 'No trend-following signal',
-                'market_conditions': market_conditions
+                'market_conditions': market_conditions,
+                'analysis_summary': analysis_summary,
+                'timestamp': datetime.now().isoformat()
             }
         
-        # HYBRID SYSTEM ANALYSIS (No LLM dependency)
-        print("🤖 Running Hybrid System Analysis...")
-        
-        # Simple validation of the hybrid decision
-        analysis_summary = {
-            "mode_detection": f"Detected {result.get('mode', 'WAIT')} mode",
-            "strategy_selection": result.get('strategy', 'NONE'),
-            "risk_validation": "Appropriate for detected mode",
-            "execution_plan": "Ready for execution" if result.get('action') == 'EXECUTE' else "No execution needed"
-        }
-        
-        # Format final result
-        decision = "WAIT"
-        if result.get('action') == 'EXECUTE':
-            decision = f"{result.get('mode', 'WAIT').upper()}_{result.get('strategy', 'NONE')}"
-        
-        # At the end, log the market conditions for trend analysis
-        # append_indicator_history(market_conditions, datetime.now()) # This line is moved
-
+        # This code is unreachable due to multiple return statements above
+        # The analysis summary should be created within each execution path
+        print("⚠️ WARNING: This code should never be reached due to multiple return statements above")
         return {
-            'status': 'SUCCESS',
-            'decision': decision,
-            'mode': result.get('mode', 'WAIT'),
-            'strategy': result.get('strategy', 'NONE'),
-            'reason': result.get('reason', 'No clear opportunity'),
-            'market_conditions': market_conditions,
-            'analysis_summary': analysis_summary,
+            'status': 'ERROR',
+            'decision': 'WAIT',
+            'reason': 'Logic error: Unreachable code reached',
             'timestamp': datetime.now().isoformat()
         }
         

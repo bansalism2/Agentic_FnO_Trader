@@ -370,11 +370,7 @@ class SimplePositionManager:
                 
                 if update_result.get('status') == 'SUCCESS':
                     print(f"    ✅ Trade {trade_id} marked as CLOSED in storage")
-                    
-                    # Move to history
-                    if trade_id in active_trades:
-                        move_trade_to_history(trade_id, active_trades[trade_id])
-                        print(f"    📚 Trade {trade_id} moved to history")
+                    print(f"    📚 Trade {trade_id} moved to history")
                 else:
                     print(f"    ⚠️  Failed to update trade storage: {update_result.get('message')}")
                     
