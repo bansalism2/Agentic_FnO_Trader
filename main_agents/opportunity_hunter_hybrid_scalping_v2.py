@@ -341,6 +341,120 @@ class ScalpingEngine:
                 'status': 'ERROR',
                 'reason': f'No clear trend signal from main flow: {trend_direction}'
             }
+    
+    def _execute_long_call_scalp(self, expiry_date: str, capital: float, conditions: Dict[str, Any]) -> Dict[str, Any]:
+        """Execute long call scalping trade"""
+        try:
+            LOT_SIZE = 75
+            # Fetch real ATM option price
+            option_price = self.fetch_atm_option_price('CE', expiry_date)
+            if not option_price or option_price <= 0:
+                print(f"[ERROR] Could not fetch real ATM call option price. Skipping trade.")
+                return {'status': 'ERROR', 'reason': 'Failed to fetch ATM call option price'}
+            
+            stop_loss_percent = conditions.get('stop_loss_percent', 6)  # Increased from 3% to 6% for options volatility
+            quantity = conditions.get('quantity', None)
+            if quantity is None:
+                quantity = self.calculate_dynamic_position_size(capital, option_price, stop_loss_percent)
+            
+            # Ensure quantity is a valid multiple of lot size (minimum 75)
+            quantity = max(LOT_SIZE, (quantity // LOT_SIZE) * LOT_SIZE)
+            
+            # 1. Create strategy
+            strategy_result = self.create_long_call(
+                expiry_date=expiry_date,
+                strike_selection='OTM',
+                quantity=quantity
+            )
+            if strategy_result.get('status') != 'SUCCESS':
+                return {'status': 'ERROR', 'reason': f'Strategy creation failed: {strategy_result.get("message")}' }
+            
+            # DYNAMIC MATURITY TIME: Determine hold time based on trade type
+            is_extreme_rsi_trade = conditions.get('is_extreme_rsi_trade', False)
+            if is_extreme_rsi_trade:
+                max_hold_time = '45 minutes'  # Extended time for extreme RSI trades
+                min_hold_time = '5 minutes'   # Slightly longer min hold for extreme trades
+                print(f"[DYNAMIC MATURITY] Extreme RSI trade detected (RSI={conditions.get('extreme_rsi_value', 'N/A')}): Extended maturity to 45 minutes")
+            else:
+                max_hold_time = '15 minutes'  # Normal scalping time
+                min_hold_time = '3 minutes'   # Normal min hold time
+            
+            # 2. Execute strategy
+            execution_result = self.execute_strategy(
+                strategy_legs=strategy_result.get('legs', []),
+                trade_metadata={
+                    'strategy_name': 'LONG_CALL_SCALP',
+                    'mode': 'SCALPING',
+                    'entry_conditions': conditions,
+                    'risk_management': {
+                        'stop_loss': f'{stop_loss_percent}%',
+                        'profit_target': '8%',  # Lower profit target for more frequent wins
+                        'max_hold_time': max_hold_time,
+                        'min_hold_time': min_hold_time
+                    },
+                    'expiry_date': expiry_date
+                }
+            )
+            return execution_result
+        except Exception as e:
+            return {'status': 'ERROR', 'reason': f'Execution failed: {str(e)}'}
+
+    def _execute_long_put_scalp(self, expiry_date: str, capital: float, conditions: Dict[str, Any]) -> Dict[str, Any]:
+        """Execute long put scalping trade"""
+        try:
+            LOT_SIZE = 75
+            # Fetch real ATM option price
+            option_price = self.fetch_atm_option_price('PE', expiry_date)
+            if not option_price or option_price <= 0:
+                print(f"[ERROR] Could not fetch real ATM put option price. Skipping trade.")
+                return {'status': 'ERROR', 'reason': 'Failed to fetch ATM put option price'}
+            
+            stop_loss_percent = conditions.get('stop_loss_percent', 6)  # Increased from 3% to 6% for options volatility
+            quantity = conditions.get('quantity', None)
+            if quantity is None:
+                quantity = self.calculate_dynamic_position_size(capital, option_price, stop_loss_percent)
+            
+            # Ensure quantity is a valid multiple of lot size (minimum 75)
+            quantity = max(LOT_SIZE, (quantity // LOT_SIZE) * LOT_SIZE)
+            
+            # 1. Create strategy
+            strategy_result = self.create_long_put(
+                expiry_date=expiry_date,
+                strike_selection='OTM',
+                quantity=quantity
+            )
+            if strategy_result.get('status') != 'SUCCESS':
+                return {'status': 'ERROR', 'reason': f'Strategy creation failed: {strategy_result.get("message")}' }
+            
+            # DYNAMIC MATURITY TIME: Determine hold time based on trade type
+            is_extreme_rsi_trade = conditions.get('is_extreme_rsi_trade', False)
+            if is_extreme_rsi_trade:
+                max_hold_time = '45 minutes'  # Extended time for extreme RSI trades
+                min_hold_time = '5 minutes'   # Slightly longer min hold for extreme trades
+                print(f"[DYNAMIC MATURITY] Extreme RSI trade detected (RSI={conditions.get('extreme_rsi_value', 'N/A')}): Extended maturity to 45 minutes")
+            else:
+                max_hold_time = '15 minutes'  # Normal scalping time
+                min_hold_time = '3 minutes'   # Normal min hold time
+            
+            # 2. Execute strategy
+            execution_result = self.execute_strategy(
+                strategy_legs=strategy_result.get('legs', []),
+                trade_metadata={
+                    'strategy_name': 'LONG_PUT_SCALP',
+                    'mode': 'SCALPING',
+                    'entry_conditions': conditions,
+                    'risk_management': {
+                        'stop_loss': f'{stop_loss_percent}%',
+                        'profit_target': '8%',  # Lower profit target for more frequent wins
+                        'max_hold_time': max_hold_time,
+                        'min_hold_time': min_hold_time
+                    },
+                    'expiry_date': expiry_date
+                }
+            )
+            return execution_result
+        except Exception as e:
+            return {'status': 'ERROR', 'reason': f'Execution failed: {str(e)}'}
 
 class PremiumSellingEngine:
     """Pure premium selling execution - multi-leg, time-based with ACTUAL strategy execution"""
